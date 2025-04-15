@@ -31,11 +31,17 @@ export default function RecentExtensions({ extensions, agentNames }: RecentExten
                       alt={agent.name || extension.agentId}
                       fill
                       className="object-cover"
+                      unoptimized={agent.imageUrl.startsWith('data:')}
                     />
                   </div>
                 ) : (
-                  <div className="w-10 h-10 bg-[#2F3336] rounded-full flex items-center justify-center">
-                    <UserIcon className="w-5 h-5 text-[#71767B]" />
+                  <div className="relative w-10 h-10 rounded-full overflow-hidden">
+                    <Image
+                      src="/default-agent.png"
+                      alt="Default Agent Avatar"
+                      fill
+                      className="object-cover"
+                    />
                   </div>
                 )}
               </div>
