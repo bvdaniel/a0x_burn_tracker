@@ -1,8 +1,9 @@
 import { cache } from 'react';
 
 interface A0xAgent {
-  agentId: string;
-  name: string;
+  id: string;
+  name?: string;
+  image?: string;
   status: string;
   imageUrl?: string;
   walletAddress?: string;
@@ -25,7 +26,7 @@ interface A0xAgent {
 
 interface AgentInfo {
   name: string;
-  imageUrl?: string;
+  image: string | null;
   socials?: {
     x?: string;
     farcaster?: string;
@@ -36,8 +37,18 @@ interface AgentInfo {
 const API_URL = process.env.NEXT_PUBLIC_A0X_MIRROR_API_URL;
 const API_KEY = process.env.NEXT_PUBLIC_A0X_MIRROR_API_KEY;
 
+// Immediately log environment status
+console.log('Environment check:', {
+  NODE_ENV: process.env.NODE_ENV,
+  hasApiUrl: !!API_URL,
+  hasApiKey: !!API_KEY
+});
+
 if (!API_URL || !API_KEY) {
-  console.error('A0x Mirror API configuration is missing. Please check your environment variables.');
+  console.error('A0x Mirror API configuration is missing:', {
+    url: API_URL ? 'set' : 'missing',
+    key: API_KEY ? 'set' : 'missing'
+  });
 }
 
 const isEthereumAddress = (id: string): boolean => {
@@ -88,6 +99,10 @@ function getSocialLinks(agent: A0xAgent): AgentInfo['socials'] {
   return Object.keys(socials).length > 0 ? socials : undefined;
 }
 
+const truncateAddress = (address: string): string => {
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+};
+
 export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<string, AgentInfo>> => {
   try {
     console.log('Fetching agent names for:', agentIds);
@@ -101,14 +116,13 @@ export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<strin
       headers: {
         'User-Agent': 'burntracker/1.0',
         'x-api-key': API_KEY,
-        'Origin': typeof window !== 'undefined' ? window.location.origin : '*'
+        'Accept': 'application/json'
       }
     });
 
     // Log the response status and headers
     console.log('API Response status:', response.status);
-    console.log('API Response headers:', Object.fromEntries(response.headers.entries()));
-
+    
     if (!response.ok) {
       const errorText = await response.text();
       console.error('API Error response:', errorText);
@@ -116,27 +130,16 @@ export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<strin
     }
 
     const agents: A0xAgent[] = await response.json();
-    console.log('Found', agents.length, 'agents in A0x Mirror API');
+    console.log('Successfully fetched agents:', agents.length);
     
     const agentMap = new Map<string, AgentInfo>();
-    
     agents.forEach(agent => {
-      const imageUrl = getImageFromConnections(agent) || DEFAULT_AVATAR;
-      const socials = getSocialLinks(agent);
-
-      const info: AgentInfo = {
-        name: agent.name,
-        imageUrl,
-        ...(socials && { socials })
-      };
-      
-      // Map by agent ID
-      agentMap.set(agent.agentId, info);
-      
-      // If the agent has a wallet address, also map by that
-      if (agent.walletAddress) {
-        const walletKey = agent.walletAddress.toLowerCase();
-        agentMap.set(walletKey, info);
+      if (agent.id) {
+        console.log('Processing agent:', agent.id, 'Name:', agent.name);
+        agentMap.set(agent.id.toLowerCase(), {
+          name: agent.name || truncateAddress(agent.id),
+          image: agent.image || null
+        });
       }
     });
 
@@ -152,7 +155,7 @@ export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<strin
           : id.slice(0, 8);
         agentMap.set(id, {
           name: `Agent ${shortId}`,
-          imageUrl: DEFAULT_AVATAR
+          image: null
         });
       }
     });
@@ -165,7 +168,7 @@ export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<strin
       const shortId = isEthereumAddress(id) 
         ? `${id.slice(0, 6)}...${id.slice(-4)}`
         : id.slice(0, 8);
-      return [id, { name: `Agent ${shortId}`, imageUrl: DEFAULT_AVATAR }];
+      return [id, { name: `Agent ${shortId}`, image: null }];
     }));
   }
 }); 

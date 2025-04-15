@@ -121,7 +121,7 @@ export default function Home() {
   };
 
   if (loading) {
-    return (
+  return (
       <div className="flex items-center justify-center min-h-screen bg-black">
         <div className="relative">
           <div className="w-16 h-16 border-4 border-[#1D9BF0]/20 rounded-full animate-pulse"></div>
@@ -223,7 +223,7 @@ export default function Home() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full overflow-hidden bg-white/5 flex-shrink-0">
-                          <Image
+          <Image
                             src={agentInfo?.imageUrl || DEFAULT_AVATAR}
                             alt={agentInfo?.name || 'Agent avatar'}
                             width={40}
@@ -241,8 +241,8 @@ export default function Home() {
                                 {agentInfo.socials.x && (
                                   <Link
                                     href={agentInfo.socials.x}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+          target="_blank"
+          rel="noopener noreferrer"
                                     className="text-[#71767B] hover:text-[#1D9BF0] transition-colors"
                                     title="View on X"
                                   >
@@ -254,8 +254,8 @@ export default function Home() {
                                 {agentInfo.socials.farcaster && (
                                   <Link
                                     href={agentInfo.socials.farcaster}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+          target="_blank"
+          rel="noopener noreferrer"
                                     className="text-[#71767B] hover:text-purple-400 transition-colors"
                                     title="View on Warpcast"
                                   >
