@@ -104,76 +104,117 @@ const truncateAddress = (address: string): string => {
 
 export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<string, AgentInfo>> => {
   try {
+    console.log('=== A0x Mirror API Debug ===');
+    console.log('Environment:', process.env.NODE_ENV);
+    console.log('API Config:', {
+      url: API_URL ? `${API_URL.substring(0, 30)}...` : 'missing',
+      hasKey: !!API_KEY,
+      keyLength: API_KEY?.length
+    });
     console.log('Fetching agent names for:', agentIds);
-    console.log('Using API URL:', API_URL);
-    
+
     if (!API_URL || !API_KEY) {
       throw new Error('A0x Mirror API configuration is missing');
     }
+
+    const fullUrl = `${API_URL}/agents`;
+    console.log('Making request to:', fullUrl);
     
-    const response = await fetch(API_URL + '/agents', {
-      headers: {
-        'User-Agent': 'burntracker/1.0',
-        'x-api-key': API_KEY,
-        'Accept': 'application/json'
+    try {
+      const response = await fetch(fullUrl, {
+        headers: {
+          'User-Agent': 'burntracker/1.0',
+          'x-api-key': API_KEY,
+          'Accept': 'application/json'
+        }
+      });
+
+      console.log('API Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries())
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error response body:', errorText);
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
       }
-    });
 
-    // Log the response status and headers
-    console.log('API Response status:', response.status);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('API Error response:', errorText);
-      throw new Error(`Failed to fetch agent data: ${response.status} ${response.statusText} - ${errorText}`);
-    }
+      const responseText = await response.text();
+      console.log('Raw response length:', responseText.length);
+      console.log('Response preview:', responseText.substring(0, 100) + '...');
 
-    const agents: A0xAgent[] = await response.json();
-    console.log('Successfully fetched agents:', agents.length);
-    
-    const agentMap = new Map<string, AgentInfo>();
-    agents.forEach(agent => {
-      if (agent.agentId) {
-        console.log('Processing agent:', agent.agentId, 'Name:', agent.name);
-        const imageUrl = getImageFromConnections(agent);
-        const socials = getSocialLinks(agent);
-        
-        agentMap.set(agent.agentId.toLowerCase(), {
-          name: agent.name || truncateAddress(agent.agentId),
-          imageUrl,
-          ...(socials && { socials })
-        });
+      let agents: A0xAgent[];
+      try {
+        agents = JSON.parse(responseText);
+        console.log('Successfully parsed JSON. Found agents:', agents.length);
+      } catch (parseError) {
+        console.error('Failed to parse JSON response:', parseError);
+        throw new Error('Invalid JSON response from API');
+      }
 
-        // If the agent has a wallet address, also map by that
-        if (agent.walletAddress) {
-          const walletKey = agent.walletAddress.toLowerCase();
-          agentMap.set(walletKey, {
+      const agentMap = new Map<string, AgentInfo>();
+      agents.forEach(agent => {
+        if (agent.agentId) {
+          console.log('Processing agent:', {
+            id: agent.agentId,
+            name: agent.name,
+            hasImage: !!agent.imageUrl,
+            hasWallet: !!agent.walletAddress
+          });
+          const imageUrl = getImageFromConnections(agent);
+          const socials = getSocialLinks(agent);
+          
+          agentMap.set(agent.agentId.toLowerCase(), {
             name: agent.name || truncateAddress(agent.agentId),
             imageUrl,
             ...(socials && { socials })
           });
-        }
-      }
-    });
 
-    // Second pass: Look up each requested ID
-    agentIds.forEach(id => {
-      // For Ethereum addresses, try lowercase lookup
-      const lookupId = isEthereumAddress(id) ? id.toLowerCase() : id;
-      
-      if (!agentMap.has(lookupId)) {
-        console.log('Agent not found in A0x Mirror API:', id);
+          // If the agent has a wallet address, also map by that
+          if (agent.walletAddress) {
+            const walletKey = agent.walletAddress.toLowerCase();
+            agentMap.set(walletKey, {
+              name: agent.name || truncateAddress(agent.agentId),
+              imageUrl,
+              ...(socials && { socials })
+            });
+          }
+        }
+      });
+
+      // Second pass: Look up each requested ID
+      agentIds.forEach(id => {
+        // For Ethereum addresses, try lowercase lookup
+        const lookupId = isEthereumAddress(id) ? id.toLowerCase() : id;
+        
+        if (!agentMap.has(lookupId)) {
+          console.log('Agent not found in A0x Mirror API:', id);
+          const shortId = isEthereumAddress(id) 
+            ? truncateAddress(id)
+            : id.slice(0, 8);
+          agentMap.set(id, {
+            name: `Agent ${shortId}`,
+            imageUrl: DEFAULT_AVATAR
+          });
+        }
+      });
+
+      return agentMap;
+    } catch (error) {
+      console.error('Error fetching agent names:', error);
+      // Provide fallback names for all agents in case of API failure
+      return new Map(agentIds.map(id => {
         const shortId = isEthereumAddress(id) 
           ? truncateAddress(id)
           : id.slice(0, 8);
-        agentMap.set(id, {
-          name: `Agent ${shortId}`,
-          imageUrl: DEFAULT_AVATAR
-        });
-      }
-    });
-
-    return agentMap;
+        return [id, { 
+          name: `Agent ${shortId}`, 
+          imageUrl: DEFAULT_AVATAR 
+        }];
+      }));
+    }
   } catch (error) {
     console.error('Error fetching agent names:', error);
     // Provide fallback names for all agents in case of API failure
