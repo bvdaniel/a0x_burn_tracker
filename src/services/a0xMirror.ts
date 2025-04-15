@@ -91,6 +91,7 @@ function getSocialLinks(agent: A0xAgent): AgentInfo['socials'] {
 export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<string, AgentInfo>> => {
   try {
     console.log('Fetching agent names for:', agentIds);
+    console.log('Using API URL:', API_URL);
     
     if (!API_URL || !API_KEY) {
       throw new Error('A0x Mirror API configuration is missing');
@@ -99,12 +100,19 @@ export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<strin
     const response = await fetch(API_URL + '/agents', {
       headers: {
         'User-Agent': 'burntracker/1.0',
-        'x-api-key': API_KEY
+        'x-api-key': API_KEY,
+        'Origin': typeof window !== 'undefined' ? window.location.origin : '*'
       }
     });
 
+    // Log the response status and headers
+    console.log('API Response status:', response.status);
+    console.log('API Response headers:', Object.fromEntries(response.headers.entries()));
+
     if (!response.ok) {
-      throw new Error(`Failed to fetch agent data: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      console.error('API Error response:', errorText);
+      throw new Error(`Failed to fetch agent data: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     const agents: A0xAgent[] = await response.json();
