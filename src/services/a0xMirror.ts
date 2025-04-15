@@ -12,6 +12,10 @@ interface A0xAgent {
     imageUrl?: string;
     username: string;
   }>;
+  farcasterClient?: {
+    username: string;
+    fid?: number;
+  };
   twitterClient?: {
     username: string;
     email: string;
@@ -22,6 +26,11 @@ interface A0xAgent {
 interface AgentInfo {
   name: string;
   imageUrl?: string;
+  socials?: {
+    x?: string;
+    farcaster?: string;
+    telegram?: string;
+  };
 }
 
 const API_URL = 'https://development-a0x-mirror-api-422317649866.us-central1.run.app';
@@ -31,27 +40,49 @@ const isEthereumAddress = (id: string): boolean => {
   return /^0x[a-fA-F0-9]{40}$/.test(id);
 };
 
-const getImageFromConnections = (agent: A0xAgent): string | undefined => {
-  // First try direct image
+// Default avatar from our public directory
+const DEFAULT_AVATAR = '/default-agent.png';
+
+function getImageFromConnections(agent: A0xAgent): string | undefined {
   if (agent.imageUrl) return agent.imageUrl;
   
-  // Then try Twitter profile image
+  if (agent.connectedWith?.length) {
+    const xProfile = agent.connectedWith.find(c => c.app.toLowerCase() === 'x');
+    if (xProfile?.imageUrl) return xProfile.imageUrl;
+  }
+  
+  if (agent.twitterClient?.profileImageUrl) {
+    return agent.twitterClient.profileImageUrl;
+  }
+
+  // Add fallback for Twitter usernames using unavatar.io
   if (agent.twitterClient?.username) {
-    // Construct Twitter profile image URL
     return `https://unavatar.io/twitter/${agent.twitterClient.username}`;
   }
   
-  // Finally try connected accounts
-  if (agent.connectedWith && agent.connectedWith.length > 0) {
-    const connectionWithImage = agent.connectedWith.find(conn => conn.imageUrl);
-    if (connectionWithImage) return connectionWithImage.imageUrl;
-  }
-  
   return undefined;
-};
+}
 
-// Default avatar from our public directory
-const DEFAULT_AVATAR = '/default-agent.png';
+function getSocialLinks(agent: A0xAgent): AgentInfo['socials'] {
+  const socials: AgentInfo['socials'] = {};
+
+  // Get X/Twitter handle from connectedWith
+  const xProfile = agent.connectedWith?.find(c => 
+    c.app.toLowerCase() === 'x' || c.app.toLowerCase() === 'twitter'
+  );
+  if (xProfile?.username) {
+    socials.x = `https://x.com/${xProfile.username}`;
+  } else if (agent.twitterClient?.username) {
+    socials.x = `https://x.com/${agent.twitterClient.username}`;
+  }
+
+  // Get Farcaster handle
+  if (agent.farcasterClient?.username) {
+    socials.farcaster = `https://warpcast.com/${agent.farcasterClient.username}`;
+  }
+
+  return Object.keys(socials).length > 0 ? socials : undefined;
+}
 
 export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<string, AgentInfo>> => {
   try {
@@ -75,9 +106,12 @@ export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<strin
     
     agents.forEach(agent => {
       const imageUrl = getImageFromConnections(agent) || DEFAULT_AVATAR;
-      const info = {
+      const socials = getSocialLinks(agent);
+
+      const info: AgentInfo = {
         name: agent.name,
-        imageUrl
+        imageUrl,
+        ...(socials && { socials })
       };
       
       // Map by agent ID

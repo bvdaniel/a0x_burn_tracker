@@ -165,7 +165,15 @@ export class BlockchainService {
         diffDays: remainingDays
       });
 
-      const status = remainingDays < 36 ? 'critical' : remainingDays < 90 ? 'inactive' : 'active';
+      // Update status logic to include critical state
+      let status: 'active' | 'inactive' | 'critical';
+      if (remainingDays <= 0) {
+        status = 'inactive';
+      } else if (remainingDays <= 5) {
+        status = 'critical';
+      } else {
+        status = 'active';
+      }
 
       if (!agentMap.has(event.agentId)) {
         // First extension for this agent
