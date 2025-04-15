@@ -1,12 +1,8 @@
 import { ExtensionEvent } from '../types';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import Image from 'next/image';
-import { UserIcon } from '@heroicons/react/24/outline';
-
-const truncateAddress = (address: string) => {
-  if (!address) return '';
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
-};
+import { UserIcon } from '@heroicons/react/24/solid';
+import { truncateAddress } from '../utils/format';
 
 interface RecentExtensionsProps {
   extensions: ExtensionEvent[];
@@ -17,46 +13,47 @@ const DEFAULT_AVATAR = '/default-agent.png';
 
 export default function RecentExtensions({ extensions, agentNames }: RecentExtensionsProps) {
   return (
-    <div className="bg-slate-800/50 rounded-xl p-6 backdrop-blur-sm">
-      <h2 className="text-xl font-bold mb-4 text-slate-200">Recent Extensions</h2>
-      <div className="space-y-4">
+    <div className="bg-black rounded-2xl border border-[#2F3336] p-6 h-full flex flex-col">
+      <h2 className="text-xl font-bold mb-4 text-[#E7E9EA]">Recent Extensions</h2>
+      <div className="flex-1 flex flex-col gap-2 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-[#2F3336] scrollbar-track-transparent">
         {extensions.map((extension) => {
           const agent = agentNames.get(extension.agentId);
           return (
             <div
               key={extension.id}
-              className="flex items-center gap-4 bg-slate-700/30 rounded-lg p-4 hover:bg-slate-700/40 transition-colors"
+              className="flex items-start gap-3 p-3 hover:bg-black/60 transition-all duration-200 rounded-xl border border-[#2F3336]/50"
             >
               <div className="flex-shrink-0">
                 {agent?.imageUrl ? (
-                  <Image
-                    src={agent.imageUrl}
-                    alt={agent.name || extension.agentId}
-                    width={48}
-                    height={48}
-                    className="rounded-full"
-                  />
+                  <div className="relative w-10 h-10 rounded-full overflow-hidden">
+                    <Image
+                      src={agent.imageUrl}
+                      alt={agent.name || extension.agentId}
+                      fill
+                      className="object-cover"
+                    />
+                  </div>
                 ) : (
-                  <div className="w-12 h-12 bg-slate-600 rounded-full flex items-center justify-center">
-                    <UserIcon className="w-6 h-6 text-slate-400" />
+                  <div className="w-10 h-10 bg-[#2F3336] rounded-full flex items-center justify-center">
+                    <UserIcon className="w-5 h-5 text-[#71767B]" />
                   </div>
                 )}
               </div>
-              <div className="flex-grow">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-slate-200">
+              <div className="flex-grow min-w-0">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-medium text-[#E7E9EA] truncate">
                     {agent?.name || truncateAddress(extension.agentId)}
                   </span>
-                  <span className="text-sm text-slate-400">
+                  <span className="text-xs text-[#71767B] flex-shrink-0 ml-2">
                     {formatDistanceToNow(extension.timestamp)} ago
                   </span>
                 </div>
-                <div className="flex items-center gap-4 mt-1 text-sm">
-                  <span className="text-slate-300">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-[#1D9BF0] font-medium">
                     +{extension.duration} days
                   </span>
-                  <span className="text-amber-500">
-                    {extension.a0xBurned.toLocaleString()} A0X burned
+                  <span className="text-sm text-[#F7931A] font-medium">
+                    {extension.a0xBurned.toLocaleString()} A0X
                   </span>
                 </div>
               </div>
