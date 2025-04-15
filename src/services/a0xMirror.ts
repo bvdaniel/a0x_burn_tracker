@@ -33,8 +33,12 @@ interface AgentInfo {
   };
 }
 
-const API_URL = 'https://development-a0x-mirror-api-422317649866.us-central1.run.app';
-const API_KEY = '24*a0x-mirror*24';
+const API_URL = process.env.NEXT_PUBLIC_A0X_MIRROR_API_URL;
+const API_KEY = process.env.NEXT_PUBLIC_A0X_MIRROR_API_KEY;
+
+if (!API_URL || !API_KEY) {
+  console.error('A0x Mirror API configuration is missing. Please check your environment variables.');
+}
 
 const isEthereumAddress = (id: string): boolean => {
   return /^0x[a-fA-F0-9]{40}$/.test(id);
@@ -88,7 +92,11 @@ export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<strin
   try {
     console.log('Fetching agent names for:', agentIds);
     
-    const response = await fetch(`${API_URL}/agents`, {
+    if (!API_URL || !API_KEY) {
+      throw new Error('A0x Mirror API configuration is missing');
+    }
+    
+    const response = await fetch(API_URL + '/agents', {
       headers: {
         'User-Agent': 'burntracker/1.0',
         'x-api-key': API_KEY
