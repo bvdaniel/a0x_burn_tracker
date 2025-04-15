@@ -27,7 +27,7 @@ const nextConfig = {
       {
         protocol: 'https',
         hostname: 'unavatar.io',
-        pathname: '/twitter/**',
+        pathname: '/**',
       },
     ],
   },
