@@ -1,9 +1,8 @@
 import { cache } from 'react';
 
 interface A0xAgent {
-  id: string;
+  agentId: string;
   name?: string;
-  image?: string;
   status: string;
   imageUrl?: string;
   walletAddress?: string;
@@ -26,7 +25,7 @@ interface A0xAgent {
 
 interface AgentInfo {
   name: string;
-  image: string | null;
+  imageUrl: string;
   socials?: {
     x?: string;
     farcaster?: string;
@@ -58,7 +57,7 @@ const isEthereumAddress = (id: string): boolean => {
 // Default avatar from our public directory
 const DEFAULT_AVATAR = '/default-agent.png';
 
-function getImageFromConnections(agent: A0xAgent): string | undefined {
+function getImageFromConnections(agent: A0xAgent): string {
   if (agent.imageUrl) return agent.imageUrl;
   
   if (agent.connectedWith?.length) {
@@ -75,7 +74,7 @@ function getImageFromConnections(agent: A0xAgent): string | undefined {
     return `https://unavatar.io/twitter/${agent.twitterClient.username}`;
   }
   
-  return undefined;
+  return DEFAULT_AVATAR;
 }
 
 function getSocialLinks(agent: A0xAgent): AgentInfo['socials'] {
@@ -134,12 +133,26 @@ export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<strin
     
     const agentMap = new Map<string, AgentInfo>();
     agents.forEach(agent => {
-      if (agent.id) {
-        console.log('Processing agent:', agent.id, 'Name:', agent.name);
-        agentMap.set(agent.id.toLowerCase(), {
-          name: agent.name || truncateAddress(agent.id),
-          image: agent.image || null
+      if (agent.agentId) {
+        console.log('Processing agent:', agent.agentId, 'Name:', agent.name);
+        const imageUrl = getImageFromConnections(agent);
+        const socials = getSocialLinks(agent);
+        
+        agentMap.set(agent.agentId.toLowerCase(), {
+          name: agent.name || truncateAddress(agent.agentId),
+          imageUrl,
+          ...(socials && { socials })
         });
+
+        // If the agent has a wallet address, also map by that
+        if (agent.walletAddress) {
+          const walletKey = agent.walletAddress.toLowerCase();
+          agentMap.set(walletKey, {
+            name: agent.name || truncateAddress(agent.agentId),
+            imageUrl,
+            ...(socials && { socials })
+          });
+        }
       }
     });
 
@@ -151,11 +164,11 @@ export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<strin
       if (!agentMap.has(lookupId)) {
         console.log('Agent not found in A0x Mirror API:', id);
         const shortId = isEthereumAddress(id) 
-          ? `${id.slice(0, 6)}...${id.slice(-4)}`
+          ? truncateAddress(id)
           : id.slice(0, 8);
         agentMap.set(id, {
           name: `Agent ${shortId}`,
-          image: null
+          imageUrl: DEFAULT_AVATAR
         });
       }
     });
@@ -166,9 +179,12 @@ export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<strin
     // Provide fallback names for all agents in case of API failure
     return new Map(agentIds.map(id => {
       const shortId = isEthereumAddress(id) 
-        ? `${id.slice(0, 6)}...${id.slice(-4)}`
+        ? truncateAddress(id)
         : id.slice(0, 8);
-      return [id, { name: `Agent ${shortId}`, image: null }];
+      return [id, { 
+        name: `Agent ${shortId}`, 
+        imageUrl: DEFAULT_AVATAR 
+      }];
     }));
   }
 }); 
