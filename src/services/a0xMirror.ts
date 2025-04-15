@@ -122,11 +122,22 @@ export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<strin
     
     try {
       const response = await fetch(fullUrl, {
+        method: 'GET',
+        mode: 'cors',
+        credentials: 'omit',
         headers: {
           'User-Agent': 'burntracker/1.0',
           'x-api-key': API_KEY,
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'Origin': typeof window !== 'undefined' ? window.location.origin : '*'
         }
+      }).catch(fetchError => {
+        console.error('Fetch error details:', {
+          message: fetchError.message,
+          type: fetchError.type,
+          name: fetchError.name
+        });
+        throw fetchError;
       });
 
       console.log('API Response:', {
@@ -136,12 +147,15 @@ export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<strin
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
+        const errorText = await response.text().catch(e => 'Failed to read error response');
         console.error('API Error response body:', errorText);
         throw new Error(`API request failed: ${response.status} ${response.statusText}`);
       }
 
-      const responseText = await response.text();
+      const responseText = await response.text().catch(e => {
+        console.error('Failed to read response body:', e);
+        throw new Error('Failed to read response body');
+      });
       console.log('Raw response length:', responseText.length);
       console.log('Response preview:', responseText.substring(0, 100) + '...');
 
@@ -151,6 +165,7 @@ export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<strin
         console.log('Successfully parsed JSON. Found agents:', agents.length);
       } catch (parseError) {
         console.error('Failed to parse JSON response:', parseError);
+        console.error('Response that failed to parse:', responseText);
         throw new Error('Invalid JSON response from API');
       }
 
