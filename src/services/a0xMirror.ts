@@ -108,6 +108,20 @@ export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<strin
     console.log('Environment:', process.env.NODE_ENV);
     console.log('Fetching agent names for:', agentIds);
 
+    // If API configuration is missing, return default profiles
+    if (!API_URL || !API_KEY) {
+      console.warn('API configuration missing, returning default profiles');
+      return new Map(agentIds.map(id => {
+        const shortId = isEthereumAddress(id) 
+          ? truncateAddress(id)
+          : id.slice(0, 8);
+        return [id, { 
+          name: `Agent ${shortId}`, 
+          imageUrl: DEFAULT_AVATAR 
+        }];
+      }));
+    }
+
     // Use our proxy endpoint instead of calling the API directly
     const response = await fetch('/api/a0x-mirror', {
       method: 'GET',
@@ -120,27 +134,28 @@ export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<strin
         type: fetchError.type,
         name: fetchError.name
       });
-      throw fetchError;
+      // Return default profiles on fetch error
+      return null;
     });
 
-    console.log('API Response:', {
-      status: response.status,
-      statusText: response.statusText,
-      headers: Object.fromEntries(response.headers.entries())
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(e => 'Failed to read error response');
-      console.error('API Error response body:', errorText);
-      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    // If response is null (fetch error) or not ok, return default profiles
+    if (!response || !response.ok) {
+      console.warn('API request failed, returning default profiles');
+      return new Map(agentIds.map(id => {
+        const shortId = isEthereumAddress(id) 
+          ? truncateAddress(id)
+          : id.slice(0, 8);
+        return [id, { 
+          name: `Agent ${shortId}`, 
+          imageUrl: DEFAULT_AVATAR 
+        }];
+      }));
     }
 
     const responseText = await response.text().catch(e => {
       console.error('Failed to read response body:', e);
-      throw new Error('Failed to read response body');
+      return '[]';
     });
-    console.log('Raw response length:', responseText.length);
-    console.log('Response preview:', responseText.substring(0, 100) + '...');
 
     let agents: A0xAgent[];
     try {
@@ -148,8 +163,16 @@ export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<strin
       console.log('Successfully parsed JSON. Found agents:', agents.length);
     } catch (parseError) {
       console.error('Failed to parse JSON response:', parseError);
-      console.error('Response that failed to parse:', responseText);
-      throw new Error('Invalid JSON response from API');
+      // Return default profiles on parse error
+      return new Map(agentIds.map(id => {
+        const shortId = isEthereumAddress(id) 
+          ? truncateAddress(id)
+          : id.slice(0, 8);
+        return [id, { 
+          name: `Agent ${shortId}`, 
+          imageUrl: DEFAULT_AVATAR 
+        }];
+      }));
     }
 
     const agentMap = new Map<string, AgentInfo>();

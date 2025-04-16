@@ -80,4 +80,13 @@ export interface AgentInfo {
     farcaster?: string;
     telegram?: string;
   };
+}
+
+export interface AgentProfile {
+  name: string
+  imageUrl: string | null
+  socials?: {
+    x?: string | null
+    farcaster?: string | null
+  }
 } 

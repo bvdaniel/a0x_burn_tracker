@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
+    "@upstash/redis": "^1.34.8",
     "@wagmi/core": "^2.16.7",
     "@web3modal/wagmi": "^5.1.11",
     "chart.js": "^4.4.1",

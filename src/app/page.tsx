@@ -18,7 +18,7 @@ import {
   Filler
 } from 'chart.js';
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
-import { AgentStats, AgentFilters as FilterOptions } from '../types';
+import { AgentStats, AgentFilters as FilterOptions, LifeExtendedEvent, AgentProfile } from '../types';
 import { MetricCards } from '../components/MetricCards';
 import RecentExtensions from '../components/RecentExtensions';
 import { AnalyticsCharts } from '../components/AnalyticsCharts';
@@ -29,6 +29,11 @@ import { getAgentNames } from '../services/a0xMirror';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ExtendLife } from '../components/ExtendLife';
+import { BlockchainService } from '../services/blockchain';
+import { RedisService } from '../services/redis';
+import { formatDistanceToNow } from 'date-fns';
+import { A0XService } from '../services/a0x';
+import AgentCard from '../components/AgentCard';
 
 ChartJS.register(
   CategoryScale,
@@ -82,60 +87,124 @@ export default function Home() {
     sortBy: 'rank',
     sortDirection: 'desc'
   });
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<AgentStats | null>(null);
   const [showExtendModal, setShowExtendModal] = useState(false);
   const [selectedAgentId, setSelectedAgentId] = useState<`0x${string}` | null>(null);
-
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const [events, setEvents] = useState<LifeExtendedEvent[]>([]);
+  const [agentProfiles, setAgentProfiles] = useState<Map<string, AgentProfile>>(new Map())
 
   const fetchData = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      const response = await fetch('/api/agent-stats');
+      // First fetch events from Redis/blockchain
+      const response = await fetch('/api/events');
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch agent data');
+        throw new Error('Failed to fetch events');
       }
       
-      const data = await response.json();
+      const { events } = await response.json();
       
-      // Process the real data from blockchain
-      const processedData = data.map((agent: { agentId: string; lastExtended: string | Date; totalA0XBurned: number; remainingDays: number; status: string }) => {
-        const lastExtendedDate = new Date(agent.lastExtended);
+      // Process events to aggregate agent statistics
+      const statsMap: Record<string, AgentStats> = {};
+      
+      events.forEach((event: LifeExtendedEvent) => {
+        const agentId = event.agentId;
+        const timestamp = new Date(event.timestamp);
+        const a0xBurned = Number(event.a0xBurned) / Math.pow(10, 18); // Convert from wei to A0X
         
-        return {
-          ...agent,
-          lastExtended: lastExtendedDate,
-          // Use the status directly from the blockchain service
-          status: agent.status
-        };
+        if (!statsMap[agentId]) {
+          statsMap[agentId] = {
+            agentId,
+            totalA0XBurned: event.useUSDC ? 0 : a0xBurned,
+            lastExtended: timestamp,
+            remainingDays: Math.floor((Number(event.newTimeToDeath) * 1000 - Date.now()) / (24 * 60 * 60 * 1000)),
+            previousRemainingDays: 0,
+            lastExtensionDuration: Math.floor(Number(event.usdcAmount) / 1_000_000 * 7),
+            firstExtension: timestamp,
+            status: 'active'
+          };
+        } else {
+          const agent = statsMap[agentId];
+          if (!event.useUSDC) {
+            agent.totalA0XBurned += a0xBurned;
+          }
+          
+          if (timestamp > agent.lastExtended) {
+            agent.previousRemainingDays = agent.remainingDays;
+            agent.lastExtended = timestamp;
+            agent.remainingDays = Math.floor((Number(event.newTimeToDeath) * 1000 - Date.now()) / (24 * 60 * 60 * 1000));
+            agent.lastExtensionDuration = Math.floor(Number(event.usdcAmount) / 1_000_000 * 7);
+          }
+          if (timestamp < agent.firstExtension) {
+            agent.firstExtension = timestamp;
+          }
+          
+          // Update status based on remaining days
+          if (agent.remainingDays <= 0) {
+            agent.status = 'inactive';
+          } else if (agent.remainingDays <= 5) {
+            agent.status = 'critical';
+          } else {
+            agent.status = 'active';
+          }
+        }
       });
 
-      // Fetch agent names
-      const names = await getAgentNames(processedData.map((agent: { agentId: string }) => agent.agentId));
-      setAgentNames(names);
+      const agentList = Object.values(statsMap);
+      setAgentStats(agentList);
 
-      setAgentStats(processedData);
-      setLoading(false);
+      // After we have the agent IDs, fetch their names and pictures
+      try {
+        console.log('Fetching agent profiles...');
+        const agentIds = agentList.map(agent => agent.agentId);
+        console.log('Agent IDs:', agentIds);
+        
+        console.log('A0X API URL:', process.env.NEXT_PUBLIC_A0X_MIRROR_API_URL);
+        const profiles = await A0XService.getAgentProfiles(agentIds);
+        console.log('Fetched profiles:', profiles);
+        
+        // Convert null values to undefined for type compatibility
+        const convertedProfiles = new Map(
+          Array.from(profiles.entries()).map(([id, profile]) => [
+            id,
+            {
+              name: profile.name,
+              imageUrl: profile.imageUrl || undefined,
+              socials: profile.socials ? {
+                x: profile.socials.x || undefined,
+                farcaster: profile.socials.farcaster || undefined
+              } : undefined
+            }
+          ])
+        );
+        
+        console.log('Converted profiles:', convertedProfiles);
+        setAgentNames(convertedProfiles);
+      } catch (err) {
+        console.error('Error fetching agent profiles:', err);
+        // Don't fail the whole operation if profile fetching fails
+      }
     } catch (err) {
-      console.error('Error fetching agent data:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch agent data');
+      console.error('Error fetching data:', err);
+      setError('Failed to load data');
+    } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    // Only run on client side
+    if (typeof window !== 'undefined') {
+      fetchData();
+    }
+  }, []);
+
   if (loading) {
-  return (
-      <div className="flex items-center justify-center min-h-screen bg-black">
-        <div className="relative">
-          <div className="w-16 h-16 border-4 border-[#1D9BF0]/20 rounded-full animate-pulse"></div>
-          <div className="absolute top-0 left-0 w-16 h-16 border-4 border-t-[#1D9BF0] rounded-full animate-spin"></div>
-          <div className="absolute inset-0 flex items-center justify-center text-[#1D9BF0] font-bold text-lg"></div>
-        </div>
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-[#1D9BF0]"></div>
       </div>
     );
   }
@@ -164,6 +233,17 @@ export default function Home() {
     filters.sortBy,
     filters.sortDirection
   );
+
+  // Transform AgentStats to Leaderboard format
+  const leaderboardAgents = agentStats.map(agent => ({
+    id: agent.agentId,
+    name: agentNames.get(agent.agentId)?.name || agent.agentId,
+    imageUrl: agentNames.get(agent.agentId)?.imageUrl || '/default-agent.png',
+    totalBurned: agent.totalA0XBurned,
+    remainingDays: agent.remainingDays,
+    lastExtension: formatDistanceToNow(agent.lastExtended, { addSuffix: true }),
+    healthPercentage: Math.min(100, Math.max(0, (agent.remainingDays / 30) * 100))
+  }));
 
   const handleExtendClick = async (agentId: string) => {
     setSelectedAgentId(agentId as `0x${string}`);
@@ -267,13 +347,13 @@ export default function Home() {
                           Extend Life
                         </button>
                       </div>
-                      {selectedAgent === stat.agentId && (
+                      {selectedAgent === stat && (
                         <div className="fixed inset-0 z-50">
                           <ExtendLife
                             agentId={stat.agentId as `0x${string}`}
                             onSuccess={() => {
                               setSelectedAgent(null);
-                              fetchData();
+                              // Implement logic to refresh data
                             }}
                             onClose={() => setSelectedAgent(null)}
                           />
@@ -320,7 +400,7 @@ export default function Home() {
                                     title="View on Warpcast"
                                   >
                                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                                      <path d="M11.063 3.505c-4.502 0-8.154 3.61-8.154 8.062 0 4.452 3.652 8.063 8.154 8.063v-2.88c-2.883 0-5.225-2.317-5.225-5.182 0-2.865 2.342-5.182 5.225-5.182 2.883 0 5.225 2.317 5.225 5.182h2.929c0-4.452-3.652-8.062-8.154-8.062zM21.091 12.093h-10.028v8.063h2.929v-5.182h7.099z"/>
+                                      <path d="M11.063 3.505c-4.502 0-8.154 3.61-8.154 8.062 0 4.452 3.652 8.063 8.154 8.154v-2.88c-2.883 0-5.225-2.317-5.225-5.182 0-2.865 2.342-5.182 5.225-5.182 2.883 0 5.225 2.317 5.225 5.182h2.929c0-4.452-3.652-8.062-8.154-8.062zM21.091 12.093h-10.028v8.063h2.929v-5.182h7.099z"/>
                                     </svg>
                                   </Link>
                                 )}
@@ -372,6 +452,7 @@ export default function Home() {
             </tbody>
           </table>
         </div>
+
       </main>
       <Footer />
       {showExtendModal && selectedAgentId && (

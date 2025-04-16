@@ -146,42 +146,6 @@ export function ExtendLife({ agentId, onSuccess, onClose }: ExtendLifeProps) {
     }
   }, [a0xBalance, amount, isUSDC, a0xAmount])
 
-  // Handle transaction completion
-  useEffect(() => {
-    const checkAllowanceAndProceed = async () => {
-      if (isTransactionSuccess && writeHash) {
-        if (isApproving) {
-          // For approval transaction, just update allowance and state
-          await new Promise(resolve => setTimeout(resolve, 1000))
-          await refetchAllowance()
-          setIsApproving(false)
-          return // Don't show success message for approval
-        }
-
-        // Only show success message for the extension transaction
-        const daysExtended = isUSDC ? Math.floor(parseFloat(amount) * 7) : parseInt(days);
-        setSuccessDetails({
-          burnedAmount: isUSDC ? amount : formattedA0XAmount,
-          days: daysExtended,
-          hash: writeHash
-        })
-        await new Promise(resolve => setTimeout(resolve, 2000))
-        onSuccess?.()
-      }
-    }
-    
-    checkAllowanceAndProceed()
-  }, [isTransactionSuccess, writeHash, isApproving, refetchAllowance, onSuccess, isUSDC, amount, days, formattedA0XAmount])
-
-  const handleClose = () => {
-    // Only reset state when user explicitly closes the modal
-    setAmount('')
-    setDays('')
-    setA0xAmount(null)
-    setSuccessDetails(null)
-    onClose?.()
-  }
-
   const handleApprove = async () => {
     try {
       setIsApproving(true)
@@ -235,6 +199,35 @@ export function ExtendLife({ agentId, onSuccess, onClose }: ExtendLifeProps) {
     }
   }
 
+  // Handle transaction completion
+  useEffect(() => {
+    const checkAllowanceAndProceed = async () => {
+      if (isTransactionSuccess && writeHash) {
+        if (isApproving) {
+          // For approval transaction, update allowance and proceed with extend
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          await refetchAllowance();
+          setIsApproving(false);
+          // After approval, trigger the extend life transaction
+          handleExtend();
+          return;
+        }
+
+        // Only show success message for the extension transaction
+        const daysExtended = isUSDC ? Math.floor(parseFloat(amount) * 7) : parseInt(days);
+        setSuccessDetails({
+          burnedAmount: isUSDC ? amount : formattedA0XAmount,
+          days: daysExtended,
+          hash: writeHash
+        })
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        onSuccess?.()
+      }
+    }
+    
+    checkAllowanceAndProceed()
+  }, [isTransactionSuccess, writeHash, isApproving, refetchAllowance, onSuccess, isUSDC, amount, days, formattedA0XAmount, handleExtend])
+
   const handleCalculateA0X = async () => {
     try {
       const daysNum = parseFloat(days)
@@ -263,6 +256,15 @@ export function ExtendLife({ agentId, onSuccess, onClose }: ExtendLifeProps) {
     } catch (error) {
       console.error('Error calculating A0X:', error)
     }
+  }
+
+  const handleClose = () => {
+    // Only reset state when user explicitly closes the modal
+    setAmount('')
+    setDays('')
+    setA0xAmount(null)
+    setSuccessDetails(null)
+    onClose?.()
   }
 
   const renderActionButton = () => {
