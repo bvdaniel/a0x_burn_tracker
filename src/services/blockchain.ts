@@ -373,7 +373,8 @@ export class BlockchainService {
         existing.stats.totalA0XBurned += a0xBurned;
         
         if (extensionDate > existing.stats.lastExtended) {
-          const extensionDuration = Math.floor(Number(event.usdcAmount) / 1_000_000 * 7);
+          // Redondear al número más cercano en lugar de hacia abajo
+          const extensionDuration = Math.round(Number(event.usdcAmount) / 1_000_000 * 7);
 
           existing.stats.previousRemainingDays = existing.stats.remainingDays;
           existing.stats.lastExtended = extensionDate;

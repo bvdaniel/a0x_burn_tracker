@@ -1,30 +1,17 @@
 import { NextResponse } from 'next/server';
-import { BlockchainService } from '../../../services/blockchain';
+import { BlockchainService } from '@/services/blockchain';
 
-// Cache the response for 5 minutes
-export const revalidate = 300;
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET() {
   try {
-    const blockchainService = new BlockchainService();
-    const events = await blockchainService.getLifeExtendedEvents();
+    const service = new BlockchainService();
+    const events = await service.getLifeExtendedEvents();
     const stats = BlockchainService.aggregateAgentStats(events);
-    
-    return NextResponse.json(stats, {
-      headers: {
-        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600'
-      }
-    });
+    return NextResponse.json(stats);
   } catch (error) {
     console.error('Error fetching agent stats:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch agent data' },
-      { 
-        status: 500,
-        headers: {
-          'Cache-Control': 'no-store'
-        }
-      }
-    );
+    return NextResponse.json({ error: 'Failed to fetch agent stats' }, { status: 500 });
   }
 } 

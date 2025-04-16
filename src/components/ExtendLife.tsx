@@ -159,9 +159,10 @@ export function ExtendLife({ agentId, onSuccess, onClose }: ExtendLifeProps) {
         }
 
         // Only show success message for the extension transaction
+        const daysExtended = isUSDC ? Math.floor(parseFloat(amount) * 7) : parseInt(days);
         setSuccessDetails({
           burnedAmount: isUSDC ? amount : formattedA0XAmount,
-          days: isUSDC ? Math.floor(parseFloat(amount) * 7) : parseInt(days),
+          days: daysExtended,
           hash: writeHash
         })
         await new Promise(resolve => setTimeout(resolve, 2000))
@@ -209,14 +210,17 @@ export function ExtendLife({ agentId, onSuccess, onClose }: ExtendLifeProps) {
 
   const handleExtend = async () => {
     try {
+      // For A0X path: days input is already in days, we convert to USDC amount
+      // For USDC path: amount input is in USDC, we calculate days
+      const daysToExtend = isUSDC ? Math.floor(parseFloat(amount) * 7) : parseInt(days);
       const usdcAmount = isUSDC
         ? parseUnits(amount, 6)
-        : parseUnits((parseInt(days) / 7).toFixed(6), 6)
+        : parseUnits((daysToExtend / 7).toFixed(6), 6)
       
       console.log('Extending with:', {
         isUSDC,
         usdcAmount: usdcAmount.toString(),
-        days: isUSDC ? Math.floor(parseFloat(amount) * 7) : days,
+        daysToExtend,
         agentId
       })
 

@@ -18,15 +18,41 @@ interface LeaderboardProps {
 
 export function Leaderboard({ agents, onRefresh }: LeaderboardProps) {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
-  const { isConnected } = useAccount()
-  const { open } = useWeb3Modal()
+  const { address } = useAccount()
+  const { open: openConnectModal } = useWeb3Modal()
 
-  const handleExtendClick = async (agentId: string) => {
-    if (!isConnected) {
-      await open()
+  const handleExtendClick = (agentId: string) => {
+    if (!address) {
+      openConnectModal()
       return
     }
     setSelectedAgent(agentId)
+  }
+
+  const handleExtendSuccess = async () => {
+    // Cerrar el modal inmediatamente para feedback visual
+    setSelectedAgent(null)
+
+    // Esperar 10 segundos para asegurar que la transacción esté indexada
+    await new Promise(resolve => setTimeout(resolve, 10000))
+    
+    const maxRetries = 3
+    const retryDelay = 5000 // 5 segundos entre reintentos
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        // Intentar refrescar los datos
+        onRefresh?.()
+        // Si llegamos aquí, el refresco fue exitoso
+        break
+      } catch (error) {
+        console.error(`Error refrescando datos (intento ${attempt + 1}/${maxRetries}):`, error)
+        if (attempt < maxRetries - 1) {
+          // Esperar antes del siguiente reintento
+          await new Promise(resolve => setTimeout(resolve, retryDelay))
+        }
+      }
+    }
   }
 
   return (
@@ -88,10 +114,8 @@ export function Leaderboard({ agents, onRefresh }: LeaderboardProps) {
                   <td colSpan={5} className="px-6 py-4">
                     <ExtendLife 
                       agentId={agent.id as `0x${string}`}
-                      onSuccess={() => {
-                        setSelectedAgent(null)
-                        onRefresh?.()
-                      }}
+                      onSuccess={handleExtendSuccess}
+                      onClose={() => setSelectedAgent(null)}
                     />
                   </td>
                 </tr>
