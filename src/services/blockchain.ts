@@ -33,7 +33,7 @@ export class BlockchainService {
 
       // Look back approximately 30 days
       const blocksPerDay = 5760; // 24 * 60 * 60 / 15
-      const lookbackBlocks = blocksPerDay * 30; // Increased from 7 to 30 days
+      const lookbackBlocks = blocksPerDay * 30;
       const fromBlock = Math.max(0, currentBlock - lookbackBlocks);
 
       console.log('Searching from block:', fromBlock);
@@ -60,8 +60,9 @@ export class BlockchainService {
         throw new Error('No contract code found at the specified address');
       }
 
-      // Try to get logs in smaller chunks with retries
-      const CHUNK_SIZE = blocksPerDay; // 1 day chunks
+      // Reduce chunk size and add delay between requests
+      const CHUNK_SIZE = blocksPerDay / 2; // Half-day chunks
+      const DELAY_BETWEEN_CHUNKS = 1000; // 1 second delay between chunks
       const MAX_RETRIES = 3;
       const logs: ethers.Log[] = [];
       
@@ -69,6 +70,11 @@ export class BlockchainService {
         const end = Math.min(start + CHUNK_SIZE, currentBlock);
         console.log(`Fetching logs for blocks ${start} to ${end}...`);
         
+        // Add delay between chunks
+        if (start > fromBlock) {
+          await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_CHUNKS));
+        }
+
         let retries = 0;
         while (retries < MAX_RETRIES) {
           try {
@@ -86,8 +92,10 @@ export class BlockchainService {
             if (retries === MAX_RETRIES) {
               console.error(`Failed to fetch chunk ${start}-${end} after ${MAX_RETRIES} attempts`);
             } else {
-              // Wait before retrying (exponential backoff)
-              await new Promise(resolve => setTimeout(resolve, Math.pow(2, retries) * 1000));
+              // Exponential backoff with longer delays
+              const backoffDelay = Math.pow(2, retries) * 2000; // Start with 2s, then 4s, then 8s
+              console.log(`Waiting ${backoffDelay}ms before retry...`);
+              await new Promise(resolve => setTimeout(resolve, backoffDelay));
             }
           }
         }
@@ -95,28 +103,35 @@ export class BlockchainService {
 
       console.log('Total logs found:', logs.length);
 
-      if (logs.length === 0) {
-        console.log('No events found. This could mean:');
-        console.log('1. No events have been emitted in the last 30 days');
-        console.log('2. The contract address might be incorrect');
-        console.log('3. The event topic might be incorrect');
+      // Process logs in smaller batches to avoid rate limiting
+      const BATCH_SIZE = 5;
+      const processedEvents: LifeExtendedEvent[] = [];
+      
+      for (let i = 0; i < logs.length; i += BATCH_SIZE) {
+        const batch = logs.slice(i, i + BATCH_SIZE);
+        
+        // Add delay between batches
+        if (i > 0) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
+        const batchEvents = await Promise.all(batch.map(async log => {
+          const block = await this.provider.getBlock(log.blockNumber);
+          const decoded = this.contract.interface.decodeEventLog('LifeExtended', log.data, log.topics);
+          return {
+            agentId: decoded.agentId,
+            usdcAmount: decoded.usdcAmount,
+            a0xBurned: decoded.a0xBurned,
+            newTimeToDeath: decoded.newTimeToDeath,
+            useUSDC: decoded.useUSDC,
+            timestamp: block?.timestamp ? new Date(Number(block.timestamp) * 1000) : new Date()
+          };
+        }));
+
+        processedEvents.push(...batchEvents);
       }
 
-      // Get block timestamps for all logs
-      const events = await Promise.all(logs.map(async log => {
-        const block = await this.provider.getBlock(log.blockNumber);
-        const decoded = this.contract.interface.decodeEventLog('LifeExtended', log.data, log.topics);
-        return {
-          agentId: decoded.agentId,
-          usdcAmount: decoded.usdcAmount,
-          a0xBurned: decoded.a0xBurned,
-          newTimeToDeath: decoded.newTimeToDeath,
-          useUSDC: decoded.useUSDC,
-          timestamp: block?.timestamp ? new Date(Number(block.timestamp) * 1000) : new Date()
-        };
-      }));
-
-      return events;
+      return processedEvents;
     } catch (error) {
       console.error('Error fetching events:', error);
       if (error instanceof Error) {

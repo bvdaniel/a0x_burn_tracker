@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
+    "@wagmi/core": "^2.16.7",
+    "@web3modal/wagmi": "^5.1.11",
     "chart.js": "^4.4.1",
     "date-fns": "^3.3.1",
     "ethers": "^6.13.5",
@@ -17,7 +19,9 @@
     "react": "^18.2.0",
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18.2.0",
-    "sharp": "^0.34.1"
+    "sharp": "^0.34.1",
+    "viem": "^2.27.0",
+    "wagmi": "^2.14.16"
   },
   "devDependencies": {
     "@types/node": "^20.11.16",

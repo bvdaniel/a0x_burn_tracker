@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
+import { useWeb3Modal } from '@web3modal/wagmi/react'
+import { useAccount } from 'wagmi'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -26,6 +28,7 @@ import { getDashboardAnalytics, filterAndSortAgents } from '../utils/analytics';
 import { getAgentNames } from '../services/a0xMirror';
 import Image from 'next/image';
 import Link from 'next/link';
+import { ExtendLife } from '../components/ExtendLife';
 
 ChartJS.register(
   CategoryScale,
@@ -69,6 +72,8 @@ const DEFAULT_AVATAR = '/default-agent.png';
 export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { isConnected } = useAccount()
+  const { open } = useWeb3Modal()
   const [agentStats, setAgentStats] = useState<AgentStats[]>([]);
   const [agentNames, setAgentNames] = useState<Map<string, { name: string; imageUrl?: string; socials?: { x?: string; farcaster?: string } }>>(new Map());
   const [filters, setFilters] = useState<FilterOptions>({
@@ -77,6 +82,9 @@ export default function Home() {
     sortBy: 'rank',
     sortDirection: 'desc'
   });
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [showExtendModal, setShowExtendModal] = useState(false);
+  const [selectedAgentId, setSelectedAgentId] = useState<`0x${string}` | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -157,6 +165,38 @@ export default function Home() {
     filters.sortDirection
   );
 
+  const handleExtendClick = async (agentId: string) => {
+    setSelectedAgentId(agentId as `0x${string}`);
+    setShowExtendModal(true);
+  };
+
+  const handleExtendSuccess = async () => {
+    // Wait longer before first attempt to ensure transaction is indexed
+    await new Promise(resolve => setTimeout(resolve, 10000))
+    
+    const maxRetries = 3
+    const retryDelay = 5000 // 5 seconds between retries
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const response = await fetch('/api/agent-stats')
+        if (!response.ok) {
+          throw new Error('Failed to fetch agent stats')
+        }
+        const newData = await response.json()
+        setAgentStats(newData)
+        // Success - exit retry loop
+        break
+      } catch (error) {
+        console.error(`Error refreshing agent stats (attempt ${attempt + 1}/${maxRetries}):`, error)
+        if (attempt < maxRetries - 1) {
+          // Wait before next retry
+          await new Promise(resolve => setTimeout(resolve, retryDelay))
+        }
+      }
+    }
+  }
+
   return (
     <div className="min-h-screen bg-black flex flex-col">
       <main className="flex-1 max-w-7xl mx-auto px-4 py-8">
@@ -197,7 +237,7 @@ export default function Home() {
           <table className="min-w-full divide-y divide-[#2F3336]">
             <thead>
               <tr className="bg-black/40">
-                <th className="px-6 py-3 text-left text-xs font-medium text-[#71767B] uppercase tracking-wider">Rank</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#71767B] uppercase tracking-wider w-[200px]">Rank</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-[#71767B] uppercase tracking-wider">Agent</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-[#71767B] uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-[#71767B] uppercase tracking-wider">Total Burned</th>
@@ -211,14 +251,34 @@ export default function Home() {
                 return (
                   <tr key={stat.agentId} className="hover:bg-white/[0.03] transition-colors duration-200">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-[15px]">#{index + 1}</span>
-                        {index === 0 && (
-                          <span className="px-2 py-0.5 text-xs font-bold text-[#1D9BF0] rounded-full border border-[#1D9BF0]">
-                            LEADER
-                          </span>
-                        )}
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-[15px]">#{index + 1}</span>
+                          {index === 0 && (
+                            <span className="px-2 py-0.5 text-xs font-bold text-[#1D9BF0] rounded-full border border-[#1D9BF0]">
+                              LEADER
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleExtendClick(stat.agentId)}
+                          className="bg-[#1D9BF0] hover:bg-[#1A8CD8] px-3 py-1.5 rounded-full text-white text-sm font-medium transition-colors"
+                        >
+                          Extend Life
+                        </button>
                       </div>
+                      {selectedAgent === stat.agentId && (
+                        <div className="fixed inset-0 z-50">
+                          <ExtendLife
+                            agentId={stat.agentId as `0x${string}`}
+                            onSuccess={() => {
+                              setSelectedAgent(null);
+                              fetchData();
+                            }}
+                            onClose={() => setSelectedAgent(null)}
+                          />
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
@@ -301,8 +361,10 @@ export default function Home() {
                         <span className="text-[#71767B]">days</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-[#71767B]">
-                      {format(stat.lastExtended, 'MMM d, yyyy')}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-[#71767B]">
+                        {format(stat.lastExtended, 'MMM d, yyyy')}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -312,6 +374,13 @@ export default function Home() {
         </div>
       </main>
       <Footer />
+      {showExtendModal && selectedAgentId && (
+        <ExtendLife
+          agentId={selectedAgentId}
+          onSuccess={handleExtendSuccess}
+          onClose={() => setShowExtendModal(false)}
+        />
+      )}
     </div>
   );
 }
