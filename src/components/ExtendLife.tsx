@@ -186,14 +186,14 @@ export function ExtendLife({ agentId, onSuccess, onClose }: ExtendLifeProps) {
 
   const handleExtend = async () => {
     try {
-      // Always calculate the USDC amount based on days
-      const daysNum = parseFloat(days)
-      const usdcAmount = parseUnits((daysNum / 7).toFixed(6), 6)
+      const usdcAmount = isUSDC
+        ? parseUnits(amount, 6)
+        : parseUnits((parseInt(days) / 7).toFixed(6), 6)
       
       console.log('Extending with:', {
         isUSDC,
         usdcAmount: usdcAmount.toString(),
-        days,
+        days: isUSDC ? Math.floor(parseFloat(amount) * 7) : days,
         agentId
       })
 
@@ -201,7 +201,7 @@ export function ExtendLife({ agentId, onSuccess, onClose }: ExtendLifeProps) {
         address: LIFE_EXTENDER_ADDRESS as `0x${string}`,
         abi: LIFE_EXTENDER_ABI,
         functionName: 'extendLife',
-        args: [agentId, usdcAmount, isUSDC]
+        args: [agentId, usdcAmount, true]
       })
     } catch (error) {
       console.error('Extension error:', error)
