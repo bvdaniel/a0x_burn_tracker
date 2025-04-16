@@ -26,7 +26,7 @@ export const LIFE_EXTENDER_ABI = [
     "stateMutability": "view",
     "type": "function"
   }
-] as const
+];
 
 export const ERC20_ABI = [
   {

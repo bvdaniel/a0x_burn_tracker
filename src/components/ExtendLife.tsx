@@ -18,6 +18,7 @@ interface ExtendLifeProps {
 }
 
 export function ExtendLife({ agentId, onSuccess, onClose }: ExtendLifeProps) {
+  console.warn('🚀🚀🚀 EXTEND LIFE COMPONENT RENDERING 🚀🚀🚀');
   const [days, setDays] = useState('')
   const [amount, setAmount] = useState('')
   const [isUSDC, setIsUSDC] = useState(false)
@@ -123,6 +124,28 @@ export function ExtendLife({ agentId, onSuccess, onClose }: ExtendLifeProps) {
     }
   }, [allowance, amount, isUSDC, a0xAmount])
 
+  // Check if user has sufficient balance
+  const hasSufficientBalance = useMemo(() => {
+    if (!a0xBalance) return false
+    if (isUSDC && !amount) return false
+    if (!isUSDC && !a0xAmount) return false
+
+    try {
+      const requiredAmount = isUSDC 
+        ? parseUnits(amount, 6)
+        : a0xAmount!
+      console.log('Checking balance:', {
+        balance: a0xBalance.toString(),
+        requiredAmount: requiredAmount.toString(),
+        isSufficient: requiredAmount <= a0xBalance
+      })
+      return requiredAmount <= a0xBalance
+    } catch (error) {
+      console.error('Error checking balance:', error)
+      return false
+    }
+  }, [a0xBalance, amount, isUSDC, a0xAmount])
+
   // Handle transaction completion
   useEffect(() => {
     const checkAllowanceAndProceed = async () => {
@@ -201,7 +224,7 @@ export function ExtendLife({ agentId, onSuccess, onClose }: ExtendLifeProps) {
         address: LIFE_EXTENDER_ADDRESS as `0x${string}`,
         abi: LIFE_EXTENDER_ABI,
         functionName: 'extendLife',
-        args: [agentId, usdcAmount, true]
+        args: [agentId, usdcAmount, isUSDC]
       })
     } catch (error) {
       console.error('Extension error:', error)
@@ -240,7 +263,7 @@ export function ExtendLife({ agentId, onSuccess, onClose }: ExtendLifeProps) {
 
   const renderActionButton = () => {
     if (isUSDC && !amount || !isUSDC && !days) {
-      return (
+  return (
         <button
           disabled
           className="w-full px-4 py-3 bg-[#1D9BF0] text-white rounded-lg font-medium opacity-50 cursor-not-allowed mt-2"
@@ -362,7 +385,7 @@ export function ExtendLife({ agentId, onSuccess, onClose }: ExtendLifeProps) {
           >
             USDC
           </button>
-          <button
+        <button
             onClick={() => {
               setIsUSDC(false)
               setDays('')
@@ -376,7 +399,7 @@ export function ExtendLife({ agentId, onSuccess, onClose }: ExtendLifeProps) {
             }`}
           >
             A0X
-          </button>
+        </button>
         </div>
 
         <div className="space-y-2">
