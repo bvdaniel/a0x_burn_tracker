@@ -5,7 +5,12 @@ import "./globals.css";
 import { WalletProvider } from "../components/WalletProvider";
 import { Toaster } from 'react-hot-toast'
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({
+  subsets: ["latin"],
+  display: 'swap',
+  preload: true,
+  adjustFontFallback: true
+});
 
 export default function RootLayout({
   children,

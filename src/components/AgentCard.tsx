@@ -4,14 +4,16 @@ import { useContractWrite, usePublicClient, useAccount } from 'wagmi';
 import { CONTRACT_CONFIG } from '@/config/contract';
 import { USDC_CONTRACT_ADDRESS, USDC_ABI } from '@/config/usdc';
 import { LIFE_EXTENDER_ABI, ERC20_ABI, A0X_TOKEN_ADDRESS, LIFE_EXTENDER_ADDRESS } from '@/config/web3';
-import { AgentStats } from '@/types';
+import { AgentStats, AgentProfile } from '@/types';
+import Image from 'next/image';
 
 interface AgentCardProps {
   agent: AgentStats;
+  profile?: AgentProfile;
   onLifeExtended: () => void;
 }
 
-const AgentCard: React.FC<AgentCardProps> = ({ agent, onLifeExtended }) => {
+const AgentCard: React.FC<AgentCardProps> = ({ agent, profile, onLifeExtended }) => {
   console.warn('🎮🎮🎮 AGENT CARD COMPONENT RENDERING 🎮🎮🎮');
   
   const [isLoading, setIsLoading] = useState(false);
@@ -150,24 +152,34 @@ const AgentCard: React.FC<AgentCardProps> = ({ agent, onLifeExtended }) => {
   };
 
   return (
-    <div className="p-4 bg-black rounded-lg border border-gray-800">
-      <div className="flex gap-2 mb-4">
-        <button
-          className={`flex-1 py-2 px-4 rounded ${
-            useUSDC ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400'
-          }`}
-          onClick={() => setUseUSDC(true)}
-        >
-          USDC
-        </button>
-        <button
-          className={`flex-1 py-2 px-4 rounded ${
-            !useUSDC ? 'bg-blue-500 text-white' : 'bg-gray-800 text-gray-400'
-          }`}
-          onClick={() => setUseUSDC(false)}
-        >
-          A0X
-        </button>
+    <div className="bg-black/20 rounded-xl p-4 backdrop-blur-sm relative">
+      <div className="flex items-center gap-4">
+        <div className="relative w-16 h-16">
+          <Image
+            src={profile?.imageUrl || '/default-agent.png'}
+            alt={profile?.name || agent.agentId}
+            fill
+            className="rounded-full object-cover"
+          />
+        </div>
+        <div className="flex gap-2 mb-4">
+          <button
+            className={`flex-1 py-2 px-4 rounded ${
+              useUSDC ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400'
+            }`}
+            onClick={() => setUseUSDC(true)}
+          >
+            USDC
+          </button>
+          <button
+            className={`flex-1 py-2 px-4 rounded ${
+              !useUSDC ? 'bg-blue-500 text-white' : 'bg-gray-800 text-gray-400'
+            }`}
+            onClick={() => setUseUSDC(false)}
+          >
+            A0X
+          </button>
+        </div>
       </div>
 
       <div className="mb-4">

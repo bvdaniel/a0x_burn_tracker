@@ -20,6 +20,22 @@ export interface AgentStats {
   status: 'active' | 'inactive' | 'critical'
 }
 
+export interface AgentFilters {
+  search: string
+  status: 'all' | 'active' | 'inactive' | 'critical'
+  sortBy: 'rank' | 'name' | 'totalBurned' | 'lastExtended' | 'remainingDays'
+  sortDirection: 'asc' | 'desc'
+}
+
+export interface AgentProfile {
+  name: string
+  imageUrl?: string
+  socials?: {
+    x?: string
+    farcaster?: string
+  }
+}
+
 export interface ContractConfig {
   address: string
   abi: any[]
