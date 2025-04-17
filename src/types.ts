@@ -40,4 +40,10 @@ export interface ContractConfig {
   address: string
   abi: any[]
   eventTopic: string
+}
+
+export interface BurnRatePoint {
+  timestamp: Date
+  rate: number
+  movingAverage: number
 } 
