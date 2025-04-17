@@ -9,7 +9,9 @@ const events: LifeExtendedEvent[] = [
     a0xBurned: BigInt("1279372185396102480319442"),
     newTimeToDeath: BigInt("1745158901"),
     useUSDC: false,
-    timestamp: new Date("2025-04-13T14:21:41.000Z")
+    timestamp: new Date("2025-04-13T14:21:41.000Z"),
+    transactionHash: "0x" + "1".repeat(64),
+    blockNumber: 29022500
   },
   {
     agentId: "2b9ec976-a43c-06db-be02-a46603f9e372",
@@ -17,7 +19,9 @@ const events: LifeExtendedEvent[] = [
     a0xBurned: BigInt("5092210793714505053041038"),
     newTimeToDeath: BigInt("1747065445"),
     useUSDC: false,
-    timestamp: new Date("2025-04-14T15:57:25.000Z")
+    timestamp: new Date("2025-04-14T15:57:25.000Z"),
+    transactionHash: "0x" + "2".repeat(64),
+    blockNumber: 29022501
   },
   {
     agentId: "0x32659eA613Ce1706AbEa4109f9E2D5840196C187",
@@ -169,7 +173,9 @@ const events: LifeExtendedEvent[] = [
     a0xBurned: BigInt("1064435632250403192051670"),
     newTimeToDeath: BigInt("1745428323"),
     useUSDC: false,
-    timestamp: new Date("2025-04-16T17:12:03.000Z")
+    timestamp: new Date("2025-04-16T17:12:03.000Z"),
+    transactionHash: "0x" + "f".repeat(64),
+    blockNumber: 29022556
   }
 ];
 

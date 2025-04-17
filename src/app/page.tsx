@@ -192,12 +192,19 @@ export default function Home() {
     }
   };
 
+  // Add polling for updates
   useEffect(() => {
-    // Only run on client side
-    if (typeof window !== 'undefined') {
-      fetchData();
-    }
-  }, []);
+    // Initial fetch
+    fetchData()
+
+    // Set up polling every 5 minutes
+    const interval = setInterval(() => {
+      fetchData()
+    }, 5 * 60 * 1000)
+
+    // Cleanup on unmount
+    return () => clearInterval(interval)
+  }, []) // Empty dependency array means this runs once on mount
 
   if (loading) {
     return (
