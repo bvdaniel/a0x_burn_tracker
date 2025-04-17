@@ -22,14 +22,37 @@ export class RedisService {
       const events = await redis.get<any[]>(EVENTS_KEY)
       if (!events) return []
       
-      // Convert string back to BigInt
-      return events.map(event => ({
-        ...event,
-        usdcAmount: BigInt(event.usdcAmount),
-        a0xBurned: BigInt(event.a0xBurned),
-        newTimeToDeath: BigInt(event.newTimeToDeath),
-        timestamp: new Date(event.timestamp)
-      }))
+      // Convert string back to BigInt and ensure timestamp is a Date object
+      return events.map(event => {
+        try {
+          // Handle different timestamp formats
+          let timestamp: Date;
+          if (typeof event.timestamp === 'string') {
+            // Try parsing ISO string first
+            timestamp = new Date(event.timestamp);
+            if (isNaN(timestamp.getTime())) {
+              // If not ISO string, try parsing as number
+              timestamp = new Date(Number(event.timestamp));
+            }
+          } else if (typeof event.timestamp === 'number') {
+            timestamp = new Date(event.timestamp);
+          } else {
+            console.warn('Invalid timestamp format:', event.timestamp);
+            timestamp = new Date(); // Fallback to current time
+          }
+
+          return {
+            ...event,
+            usdcAmount: BigInt(event.usdcAmount),
+            a0xBurned: BigInt(event.a0xBurned),
+            newTimeToDeath: BigInt(event.newTimeToDeath),
+            timestamp
+          };
+        } catch (error) {
+          console.error('Error processing event from Redis:', error, event);
+          throw error;
+        }
+      });
     } catch (error) {
       console.error('Error getting events from Redis:', error)
       return []
@@ -39,14 +62,21 @@ export class RedisService {
   static async saveEvents(events: LifeExtendedEvent[]) {
     try {
       const redis = this.getClient()
-      // Convert BigInt to string for storage
-      const serializedEvents = events.map(event => ({
-        ...event,
-        usdcAmount: event.usdcAmount.toString(),
-        a0xBurned: event.a0xBurned.toString(),
-        newTimeToDeath: event.newTimeToDeath.toString(),
-        timestamp: event.timestamp.toISOString()
-      }))
+      // Convert BigInt to string and store timestamp as ISO string
+      const serializedEvents = events.map(event => {
+        try {
+          return {
+            ...event,
+            usdcAmount: event.usdcAmount.toString(),
+            a0xBurned: event.a0xBurned.toString(),
+            newTimeToDeath: event.newTimeToDeath.toString(),
+            timestamp: event.timestamp.toISOString() // Store as ISO string for better compatibility
+          };
+        } catch (error) {
+          console.error('Error serializing event for Redis:', error, event);
+          throw error;
+        }
+      });
       await redis.set(EVENTS_KEY, serializedEvents)
     } catch (error) {
       console.error('Error saving events to Redis:', error)

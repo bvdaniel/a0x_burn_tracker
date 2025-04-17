@@ -5,6 +5,8 @@ export interface LifeExtendedEvent {
   newTimeToDeath: bigint;
   useUSDC: boolean;
   timestamp: Date;
+  transactionHash: string;
+  blockNumber: number;
 }
 
 export interface AgentStats {
@@ -53,7 +55,7 @@ export interface AgentMetrics {
 export interface AgentFilters {
   search: string;
   status: 'all' | 'active' | 'inactive' | 'critical';
-  sortBy: 'rank' | 'burnRate' | 'remainingTime';
+  sortBy: 'rank' | 'name' | 'totalBurned' | 'lastExtended' | 'remainingDays';
   sortDirection: 'asc' | 'desc';
 }
 

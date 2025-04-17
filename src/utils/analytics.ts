@@ -1,6 +1,24 @@
 import { AgentStats, AgentMetrics, BurnRatePoint, ExtensionEvent, DashboardAnalytics } from '../types';
 import { subDays, differenceInDays, format, parse } from 'date-fns';
 
+// Helper function to convert Unix timestamp to Date
+function timestampToDate(timestamp: number): Date {
+  console.log('Converting timestamp:', timestamp);
+  // Handle undefined or invalid timestamps
+  if (!timestamp || isNaN(timestamp)) {
+    console.warn('Invalid timestamp:', timestamp);
+    return new Date();
+  }
+  
+  // If timestamp is in seconds (less than year 2100), convert to milliseconds
+  if (timestamp < 4102444800) { // 2100-01-01 in seconds
+    console.log('Converting seconds to milliseconds:', timestamp * 1000);
+    return new Date(timestamp * 1000);
+  }
+  console.log('Using timestamp as is:', timestamp);
+  return new Date(timestamp);
+}
+
 export function calculateAgentMetrics(agents: AgentStats[]): AgentMetrics {
   const now = new Date();
   const lastWeek = subDays(now, 7);
@@ -35,6 +53,7 @@ export function calculateAgentMetrics(agents: AgentStats[]): AgentMetrics {
 export function calculateBurnRateTrend(agents: AgentStats[]): BurnRatePoint[] {
   const now = new Date();
   const thirtyDaysAgo = subDays(now, 29);
+  const thirtyDaysAgoTimestamp = thirtyDaysAgo.getTime() / 1000; // Convert to seconds to match agent timestamps
   
   // Create a map to store daily burns
   const dailyBurns = new Map<string, number>();
@@ -47,11 +66,20 @@ export function calculateBurnRateTrend(agents: AgentStats[]): BurnRatePoint[] {
   
   // Calculate burns for each day
   agents.forEach(agent => {
-    const extensionDate = format(agent.lastExtended, 'yyyy-MM-dd');
-    if (agent.lastExtended >= thirtyDaysAgo) {
-      const currentBurns = dailyBurns.get(extensionDate) || 0;
-      // Divide by 1,000,000 to convert to a more readable unit
-      dailyBurns.set(extensionDate, currentBurns + (agent.totalA0XBurned / 1_000_000));
+    console.log('Processing agent:', agent.agentId, 'lastExtended:', agent.lastExtended);
+    try {
+      const date = timestampToDate(agent.lastExtended);
+      console.log('Converted date:', date);
+      const extensionDate = format(date, 'yyyy-MM-dd');
+      console.log('Formatted date:', extensionDate);
+      
+      if (agent.lastExtended >= thirtyDaysAgoTimestamp) {
+        const currentBurns = dailyBurns.get(extensionDate) || 0;
+        // Divide by 1,000,000 to convert to a more readable unit
+        dailyBurns.set(extensionDate, currentBurns + (agent.totalA0XBurned / 1_000_000));
+      }
+    } catch (error) {
+      console.error('Error processing agent:', agent.agentId, error);
     }
   });
   
@@ -122,18 +150,18 @@ export function generateExtensionDistribution(agents: AgentStats[]) {
 }
 
 export function calculateAgentHealth(agent: AgentStats): number {
-  const daysSinceExtension = differenceInDays(new Date(), agent.lastExtended);
+  const daysSinceExtension = differenceInDays(new Date(), timestampToDate(agent.lastExtended));
   const healthPercentage = Math.max(0, Math.min(100, 100 - (daysSinceExtension / 180) * 100));
   return Math.round(healthPercentage);
 }
 
 export function generateRecentExtensions(agents: AgentStats[]): ExtensionEvent[] {
   const now = new Date();
-  const lastWeek = subDays(now, 7);
+  const lastWeekTimestamp = subDays(now, 7).getTime() / 1000; // Convert to seconds to match agent timestamps
   
   // Get extensions from the last week
   const recentExtensions = agents
-    .filter(agent => agent.lastExtended >= lastWeek)
+    .filter(agent => agent.lastExtended >= lastWeekTimestamp)
     .map((agent, index) => {
       // For first extensions, previousRemainingDays is 0
       const previousRemainingDays = agent.previousRemainingDays;
@@ -145,7 +173,7 @@ export function generateRecentExtensions(agents: AgentStats[]): ExtensionEvent[]
       return {
         id: `evt-${index}`,
         agentId: agent.agentId,
-        timestamp: agent.lastExtended,
+        timestamp: timestampToDate(agent.lastExtended),
         duration: extensionAmount,
         a0xBurned: agent.totalA0XBurned,
         previousRemainingDays,
@@ -198,7 +226,7 @@ export function filterAndSortAgents(
         comparison = b.totalA0XBurned - a.totalA0XBurned;
         break;
       case 'lastExtended':
-        comparison = b.lastExtended.getTime() - a.lastExtended.getTime();
+        comparison = b.lastExtended - a.lastExtended; // Compare numeric timestamps directly
         break;
       case 'remainingDays':
         comparison = b.remainingDays - a.remainingDays;

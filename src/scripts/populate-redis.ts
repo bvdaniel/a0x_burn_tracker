@@ -32,14 +32,18 @@ function convertToLifeExtendedEvent(agent: AgentData): LifeExtendedEvent {
   const remainingDays = Math.round((agent.health / 100) * 30); // Assuming 100% = 30 days
   const newTimeToDeath = BigInt(Math.floor(now.getTime() / 1000) + (remainingDays * 24 * 60 * 60));
 
-  return {
+  const event: LifeExtendedEvent = {
     agentId: agent.id,
     usdcAmount: BigInt(0), // We don't have this info, but it's not critical
     a0xBurned,
     newTimeToDeath,
     useUSDC: false,
-    timestamp
+    timestamp,
+    transactionHash: `0x${agent.id.slice(0, 40)}`, // Generate a deterministic hash based on agent ID
+    blockNumber: Math.floor(timestamp.getTime() / 15000) // Approximate block number based on timestamp (15s blocks)
   };
+
+  return event;
 }
 
 export async function populateRedisFromUI(agents: AgentData[]) {

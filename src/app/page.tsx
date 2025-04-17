@@ -97,7 +97,6 @@ export default function Home() {
 
   const fetchData = async () => {
     try {
-      // Only show loading state on initial load
       if (!isInitialized) {
         setLoading(true);
       } else {
@@ -105,20 +104,28 @@ export default function Home() {
       }
       setError(null);
       
-      // Fetch events first
       const response = await fetch('/api/events');
       if (!response.ok) {
         throw new Error('Failed to fetch events');
       }
       
-      const { events: newEvents } = await response.json();
+      const { events: rawEvents } = await response.json();
+      
+      // Convert ISO strings back to Date objects
+      const newEvents = rawEvents.map((event: any) => ({
+        ...event,
+        usdcAmount: BigInt(event.usdcAmount),
+        a0xBurned: BigInt(event.a0xBurned),
+        newTimeToDeath: BigInt(event.newTimeToDeath),
+        timestamp: new Date(event.timestamp)
+      }));
       
       // Process events to aggregate agent statistics
       const statsMap: Record<string, AgentStats> = {};
       
       newEvents.forEach((event: LifeExtendedEvent) => {
         const agentId = event.agentId;
-        const timestamp = new Date(event.timestamp);
+        const timestamp = event.timestamp;
         const a0xBurned = Number(event.a0xBurned) / Math.pow(10, 18); // Convert from wei to A0X
         
         if (!statsMap[agentId]) {
@@ -136,13 +143,13 @@ export default function Home() {
           const agent = statsMap[agentId];
           agent.totalA0XBurned += a0xBurned;
           
-          if (timestamp > agent.lastExtended) {
+          if (timestamp.getTime() > agent.lastExtended.getTime()) {
             agent.previousRemainingDays = agent.remainingDays;
             agent.lastExtended = timestamp;
             agent.remainingDays = Math.round((Number(event.newTimeToDeath) * 1000 - Date.now()) / (24 * 60 * 60 * 1000));
             agent.lastExtensionDuration = Math.round(Number(event.usdcAmount) / 1_000_000 * 7);
           }
-          if (timestamp < agent.firstExtension) {
+          if (timestamp.getTime() < agent.firstExtension.getTime()) {
             agent.firstExtension = timestamp;
           }
           
@@ -247,15 +254,17 @@ export default function Home() {
   );
 
   // Transform AgentStats to Leaderboard format
-  const leaderboardAgents = agentStats.map(agent => ({
-    id: agent.agentId,
-    name: agentNames.get(agent.agentId)?.name || agent.agentId,
-    imageUrl: agentNames.get(agent.agentId)?.imageUrl || '/default-agent.png',
-    totalBurned: agent.totalA0XBurned,
-    remainingDays: agent.remainingDays,
-    lastExtension: formatDistanceToNow(agent.lastExtended, { addSuffix: true }),
-    healthPercentage: Math.min(100, Math.max(0, (agent.remainingDays / 30) * 100))
-  }));
+  const leaderboardAgents = agentStats.map(agent => {
+    return {
+      id: agent.agentId,
+      name: agentNames.get(agent.agentId)?.name || agent.agentId,
+      imageUrl: agentNames.get(agent.agentId)?.imageUrl || '/default-agent.png',
+      totalBurned: agent.totalA0XBurned,
+      remainingDays: agent.remainingDays,
+      lastExtension: formatDistanceToNow(agent.lastExtended, { addSuffix: true }),
+      healthPercentage: Math.min(100, Math.max(0, (agent.remainingDays / 30) * 100))
+    };
+  });
 
   const handleExtendClick = async (agentId: string) => {
     setSelectedAgentId(agentId as `0x${string}`);
@@ -461,7 +470,7 @@ export default function Home() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-[#71767B]">
-                        {format(stat.lastExtended, 'MMM d, yyyy')}
+                        {format(new Date(stat.lastExtended), 'MMM d, yyyy')}
                       </div>
                     </td>
                   </tr>
