@@ -60,10 +60,13 @@ export const ERC20_ABI = [
   }
 ] as const
 
-// Configure wagmi
+// Configure wagmi with better transport options
 export const config = createConfig({
   chains: [base],
   transports: {
-    [base.id]: http()
-  }
+    [base.id]: http(process.env.NEXT_PUBLIC_RPC_URL || 'https://mainnet.base.org')
+  },
+  ssr: true,
+  syncConnectedChain: true,
+  multiInjectedProviderDiscovery: true
 }) 
