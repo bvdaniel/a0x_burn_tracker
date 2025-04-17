@@ -4,10 +4,10 @@ import { useEffect, useState } from 'react';
 import { useWeb3Modal } from '@web3modal/wagmi/react';
 import { BlockchainService } from '../services/blockchain';
 import { A0XService } from '../services/a0x';
-import { LifeExtendedEvent, AgentStats, AgentProfile } from '../types';
-import { AgentCard } from './AgentCard';
-import { AgentFilters } from './AgentFilters';
-import { filterAndSortAgents } from '../utils/filters';
+import { LifeExtendedEvent, AgentStats, AgentProfile, AgentFilters } from '../types';
+import { FilterOptions, filterAndSortAgents } from '@/utils/filters';
+import AgentCard from './AgentCard';
+import { AgentFilters as AgentFiltersComponent } from './AgentFilters';
 
 export default function HomePage() {
   const [events, setEvents] = useState<LifeExtendedEvent[]>([]);
@@ -15,7 +15,7 @@ export default function HomePage() {
   const [agentProfiles, setAgentProfiles] = useState<Map<string, AgentProfile>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<AgentFilters>({
     search: '',
     status: 'all',
     sortBy: 'lastExtended',
@@ -96,7 +96,7 @@ export default function HomePage() {
       </div>
       
       <div className="max-w-7xl mx-auto space-y-6">
-        <AgentFilters
+        <AgentFiltersComponent
           filters={filters}
           onFiltersChange={setFilters}
         />
