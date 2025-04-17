@@ -91,4 +91,11 @@ export interface AgentProfile {
     x?: string | null
     farcaster?: string | null
   }
+}
+
+export interface FilterOptions {
+  searchQuery: string;
+  statusFilter: 'all' | 'active' | 'inactive' | 'critical';
+  sortBy: 'rank' | 'name' | 'totalBurned' | 'lastExtended' | 'remainingDays';
+  sortOrder: 'asc' | 'desc';
 } 

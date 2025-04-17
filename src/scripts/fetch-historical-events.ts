@@ -11,7 +11,7 @@ async function fetchHistoricalEvents() {
     console.log('Starting historical event fetch...')
     
     // Check if Redis credentials are configured
-    if (!process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL || !process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN) {
+    if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
       throw new Error('Redis credentials not configured in .env.local')
     }
     

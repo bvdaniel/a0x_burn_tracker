@@ -3,7 +3,7 @@ import { AgentStats } from '../types';
 export interface FilterOptions {
   searchQuery: string;
   status: 'all' | 'active' | 'critical' | 'inactive';
-  sortBy: 'lastExtended' | 'remainingDays' | 'totalA0XBurned';
+  sortBy: 'rank' | 'name' | 'totalBurned' | 'lastExtended' | 'remainingDays';
   sortOrder: 'asc' | 'desc';
 }
 
@@ -39,15 +39,23 @@ export function filterAndSortAgents(agents: AgentStats[], options: FilterOptions
   filteredAgents.sort((a, b) => {
     let comparison = 0;
     switch (sortBy) {
+      case 'rank':
+        comparison = (a.totalA0XBurned || 0) - (b.totalA0XBurned || 0);
+        break;
+      case 'name':
+        comparison = (a.agentId || '').localeCompare(b.agentId || '');
+        break;
+      case 'totalBurned':
+        comparison = (a.totalA0XBurned || 0) - (b.totalA0XBurned || 0);
+        break;
       case 'lastExtended':
         comparison = (a.lastExtended?.getTime() || 0) - (b.lastExtended?.getTime() || 0);
         break;
       case 'remainingDays':
         comparison = (a.remainingDays || 0) - (b.remainingDays || 0);
         break;
-      case 'totalA0XBurned':
-        comparison = (a.totalA0XBurned || 0) - (b.totalA0XBurned || 0);
-        break;
+      default:
+        comparison = 0;
     }
     return sortOrder === 'asc' ? comparison : -comparison;
   });
