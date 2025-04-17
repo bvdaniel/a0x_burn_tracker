@@ -70,49 +70,48 @@ export class BlockchainService {
 
   async getLifeExtendedEvents(): Promise<LifeExtendedEvent[]> {
     try {
-      await this.ensureProvider();
-      const currentBlock = await this.provider.getBlockNumber();
+      // Get current block
+      const currentBlock = await this.getCurrentBlock();
       
-      // Calculate block range - look back 60 days
-      const blocksPerDay = 43200; // ~2s block time
-      const lookbackBlocks = blocksPerDay * 60; // 60 days
+      // Calculate lookback (30 days worth of blocks)
+      const blocksPerDay = 5760; // 24 * 60 * 60 / 15 (15 second blocks)
+      const lookbackBlocks = blocksPerDay * 30; // 30 days
       const fromBlock = Math.max(0, currentBlock - lookbackBlocks);
+      
+      console.log(`Fetching events from block ${fromBlock} to ${currentBlock}`);
 
-      console.log('Fetching events from block', fromBlock, 'to', currentBlock);
-      console.log('Contract address:', CONTRACT_CONFIG.address);
-      console.log('Event topic:', this.eventTopic);
-
-      // Try a small range first to verify we can get events
-      const testFilter = {
-        address: CONTRACT_CONFIG.address,
-        topics: [this.eventTopic],
-        fromBlock: currentBlock - 1000,
-        toBlock: currentBlock
-      };
-
-      console.log('Testing with recent blocks...');
-      const testLogs = await this.provider.getLogs(testFilter);
-      console.log('Test query found', testLogs.length, 'events in last 1000 blocks');
-
-      const filter = {
+      // Get logs
+      const logs = await this.provider.getLogs({
         address: CONTRACT_CONFIG.address,
         topics: [this.eventTopic],
         fromBlock,
         toBlock: currentBlock
-      };
+      });
 
-      const events = await this.fetchEventsFromBlocks(filter, fromBlock, currentBlock);
+      // Parse logs into events
+      const events: LifeExtendedEvent[] = logs.map(log => {
+        const event = this.contract.interface.parseLog({
+          topics: log.topics as string[],
+          data: log.data
+        });
+        
+        if (!event) {
+          throw new Error('Failed to parse event log');
+        }
+
+        return {
+          agentId: event.args[0],
+          usdcAmount: event.args[1],
+          a0xBurned: event.args[2],
+          newTimeToDeath: event.args[3],
+          useUSDC: event.args[4],
+          timestamp: new Date((log.blockNumber! * 15 + 1609459200) * 1000), // Approximate timestamp
+          transactionHash: log.transactionHash!,
+          blockNumber: log.blockNumber!
+        };
+      });
       
-      if (events.length > 0) {
-        console.log('Found', events.length, 'events');
-        // Save to Redis in the background
-        RedisService.saveEvents(events).catch(error => {
-          console.error('Error saving events to Redis:', error);
-        });
-        RedisService.saveLastBlock(currentBlock).catch(error => {
-          console.error('Error saving last block to Redis:', error);
-        });
-      } else {
+      if (events.length === 0) {
         console.log('No events found in block range');
         // Try without topic filter as a test
         console.log('Testing without topic filter...');
@@ -128,89 +127,8 @@ export class BlockchainService {
       return events;
     } catch (error) {
       console.error('Error fetching events:', error);
-      // On error, return events from Redis if available
-      return RedisService.getEvents();
+      throw error; // Let the caller handle the error
     }
-  }
-
-  private async fetchEventsFromBlocks(
-    filter: { address: string; topics: string[]; fromBlock: number; toBlock: number },
-    fromBlock: number,
-    toBlock: number
-  ): Promise<LifeExtendedEvent[]> {
-    const CHUNK_SIZE = 2000; // Reduced chunk size
-    const DELAY_BETWEEN_CHUNKS = 1000; // Reduced delay
-    const MAX_RETRIES = 3;
-    const logs: ethers.Log[] = [];
-    
-    for (let start = fromBlock; start < toBlock; start += CHUNK_SIZE) {
-      const end = Math.min(start + CHUNK_SIZE, toBlock);
-      console.log(`Fetching chunk ${start}-${end}`);
-      
-      if (start > fromBlock) {
-        await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_CHUNKS));
-      }
-
-      let retries = 0;
-      let success = false;
-      
-      while (retries < MAX_RETRIES && !success) {
-        try {
-          const chunkLogs = await this.provider.getLogs({
-            ...filter,
-            fromBlock: start,
-            toBlock: end
-          });
-          console.log(`Found ${chunkLogs.length} logs in chunk`);
-          if (chunkLogs.length > 0) {
-            console.log('Sample log:', chunkLogs[0]);
-          }
-          logs.push(...chunkLogs);
-          success = true;
-        } catch (chunkError) {
-          retries++;
-          console.warn(`Chunk ${start}-${end} failed (attempt ${retries}):`, chunkError);
-          if (retries === MAX_RETRIES) {
-            console.error(`Failed to fetch chunk ${start}-${end} after ${MAX_RETRIES} attempts`);
-            break;
-          } else {
-            const backoffDelay = Math.pow(2, retries) * 1000;
-            await new Promise(resolve => setTimeout(resolve, backoffDelay));
-          }
-        }
-      }
-    }
-
-    console.log(`Processing ${logs.length} total logs`);
-    const events: LifeExtendedEvent[] = [];
-    
-    // Process all logs at once instead of batching
-    const processedEvents = await Promise.all(logs.map(async log => {
-      try {
-        const block = await this.provider.getBlock(log.blockNumber);
-        const decoded = this.contract.interface.decodeEventLog('LifeExtended', log.data, log.topics);
-        console.log('Decoded event:', decoded);
-        return {
-          agentId: decoded.agentId,
-          usdcAmount: BigInt(decoded.usdcAmount),
-          a0xBurned: BigInt(decoded.a0xBurned),
-          newTimeToDeath: BigInt(decoded.newTimeToDeath),
-          useUSDC: decoded.useUSDC,
-          timestamp: block?.timestamp ? new Date(Number(block.timestamp) * 1000) : new Date(),
-          transactionHash: log.transactionHash,
-          blockNumber: log.blockNumber
-        };
-      } catch (error) {
-        console.error('Error processing log:', error);
-        console.error('Log data:', log);
-        return null;
-      }
-    }));
-
-    // Filter out any null events from processing errors
-    events.push(...processedEvents.filter((event): event is LifeExtendedEvent => event !== null));
-    console.log(`Successfully processed ${events.length} events`);
-    return events;
   }
 
   static aggregateAgentStats(events: LifeExtendedEvent[]): AgentStats[] {

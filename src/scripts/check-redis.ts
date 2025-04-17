@@ -1,6 +1,6 @@
 import { RedisService } from '../services/redis';
 
-async function main() {
+const main = async () => {
   try {
     const events = await RedisService.getEvents();
     const lastBlock = await RedisService.getLastBlock();
@@ -15,6 +15,6 @@ async function main() {
   } catch (error) {
     console.error('Error checking Redis:', error);
   }
-}
+};
 
-main(); 
+main().catch(console.error); 

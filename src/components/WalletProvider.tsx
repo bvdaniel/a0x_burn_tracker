@@ -1,43 +1,52 @@
 'use client';
 
-import { createWeb3Modal } from '@web3modal/wagmi/react'
+import { createWeb3Modal, defaultWagmiConfig } from '@web3modal/wagmi/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { State, WagmiProvider } from 'wagmi'
+import { WagmiConfig } from 'wagmi'
 import { config } from '../config/web3'
 import { useEffect, useState } from 'react'
 
 // Create query client
 const queryClient = new QueryClient()
 
-export function WalletProvider({
-  children,
-  initialState
-}: {
-  children: React.ReactNode
-  initialState?: State
-}) {
+// Get project ID from environment
+const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || ''
+
+// Initialize wagmi config
+const wagmiConfig = defaultWagmiConfig({
+  chains: config.chains,
+  projectId,
+  metadata: {
+    name: 'A0X Burn Tracker',
+    description: 'Track A0X burns and life extensions',
+    url: 'https://burntracker.a0x.network',
+    icons: ['https://burntracker.a0x.network/favicon.ico']
+  }
+})
+
+// Initialize modal once
+createWeb3Modal({
+  wagmiConfig,
+  projectId,
+  enableAnalytics: false, // Disable analytics to avoid 403 errors
+  enableOnramp: false, // Disable onramp to avoid 403 errors
+  themeMode: 'dark'
+})
+
+export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    // Initialize Web3Modal on client side only
+    // Initialize on client side only
     if (typeof window !== 'undefined') {
-      createWeb3Modal({
-        wagmiConfig: config,
-        projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!,
-        enableAnalytics: true,
-        enableOnramp: true
-      })
-
       // Clear any stale WalletConnect data
-      try {
-        localStorage.removeItem('wagmi.wallet')
-        localStorage.removeItem('wagmi.connected')
-        localStorage.removeItem('wagmi.injected')
-      } catch (e) {
-        console.warn('Failed to clear local storage:', e)
-      }
-
-      setIsInitialized(true);
+      const staleKeys = Object.keys(localStorage).filter(key => 
+        key.startsWith('wc@2') || 
+        key.startsWith('wagmi') ||
+        key.startsWith('web3modal')
+      )
+      staleKeys.forEach(key => localStorage.removeItem(key))
+      setIsInitialized(true)
     }
   }, [])
 
@@ -46,10 +55,10 @@ export function WalletProvider({
   }
 
   return (
-    <WagmiProvider config={config} initialState={initialState}>
+    <WagmiConfig config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         {children}
       </QueryClientProvider>
-    </WagmiProvider>
+    </WagmiConfig>
   )
 } 

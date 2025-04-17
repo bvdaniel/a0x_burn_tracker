@@ -1,5 +1,8 @@
 import { http, createConfig } from 'wagmi'
 import { base } from 'wagmi/chains'
+import { injected, walletConnect } from 'wagmi/connectors'
+
+const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || ''
 
 export const LIFE_EXTENDER_ADDRESS = '0x32659eA613Ce1706AbEa4109f9E2D5840196C187'
 export const A0X_TOKEN_ADDRESS = '0x820C5F0fB255a1D18fd0eBB0F1CCefbC4D546dA7'
@@ -63,8 +66,12 @@ export const ERC20_ABI = [
 // Configure wagmi with better transport options
 export const config = createConfig({
   chains: [base],
+  connectors: [
+    injected(),
+    walletConnect({ projectId })
+  ],
   transports: {
-    [base.id]: http(process.env.NEXT_PUBLIC_RPC_URL || 'https://mainnet.base.org')
+    [base.id]: http()
   },
   ssr: true,
   syncConnectedChain: true,
