@@ -1,22 +1,24 @@
 import { Redis } from '@upstash/redis'
 import { LifeExtendedEvent } from '../types'
 
-const redis = new Redis({
-  url: process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL || '',
-  token: process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN || ''
-})
-
 const EVENTS_KEY = 'life_extended_events'
 const LAST_BLOCK_KEY = 'last_block'
 
 export class RedisService {
+  private static getClient() {
+    const url = process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL
+    const token = process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN
+    
+    if (!url || !token) {
+      throw new Error('Redis credentials not configured')
+    }
+    
+    return new Redis({ url, token })
+  }
+
   static async getEvents(): Promise<LifeExtendedEvent[]> {
     try {
-      if (!process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL || !process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN) {
-        console.error('Redis credentials not configured')
-        return []
-      }
-
+      const redis = this.getClient()
       const events = await redis.get<any[]>(EVENTS_KEY)
       if (!events) return []
       
@@ -36,11 +38,7 @@ export class RedisService {
 
   static async saveEvents(events: LifeExtendedEvent[]) {
     try {
-      if (!process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL || !process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN) {
-        console.error('Redis credentials not configured')
-        return
-      }
-
+      const redis = this.getClient()
       // Convert BigInt to string for storage
       const serializedEvents = events.map(event => ({
         ...event,
@@ -57,11 +55,7 @@ export class RedisService {
 
   static async getLastBlock(): Promise<number> {
     try {
-      if (!process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL || !process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN) {
-        console.error('Redis credentials not configured')
-        return 0
-      }
-
+      const redis = this.getClient()
       const block = await redis.get<number>(LAST_BLOCK_KEY)
       return block || 0
     } catch (error) {
@@ -72,11 +66,7 @@ export class RedisService {
 
   static async saveLastBlock(block: number) {
     try {
-      if (!process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL || !process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN) {
-        console.error('Redis credentials not configured')
-        return
-      }
-
+      const redis = this.getClient()
       await redis.set(LAST_BLOCK_KEY, block)
     } catch (error) {
       console.error('Error saving last block to Redis:', error)
@@ -85,11 +75,7 @@ export class RedisService {
 
   static async clearCache() {
     try {
-      if (!process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL || !process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN) {
-        console.error('Redis credentials not configured')
-        return
-      }
-
+      const redis = this.getClient()
       await redis.del(EVENTS_KEY)
       await redis.del(LAST_BLOCK_KEY)
       console.log('Cache cleared successfully')

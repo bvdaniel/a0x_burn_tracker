@@ -117,25 +117,23 @@ export default function Home() {
         if (!statsMap[agentId]) {
           statsMap[agentId] = {
             agentId,
-            totalA0XBurned: event.useUSDC ? 0 : a0xBurned,
+            totalA0XBurned: a0xBurned,
             lastExtended: timestamp,
-            remainingDays: Math.floor((Number(event.newTimeToDeath) * 1000 - Date.now()) / (24 * 60 * 60 * 1000)),
+            remainingDays: Math.round((Number(event.newTimeToDeath) * 1000 - Date.now()) / (24 * 60 * 60 * 1000)),
             previousRemainingDays: 0,
-            lastExtensionDuration: Math.floor(Number(event.usdcAmount) / 1_000_000 * 7),
+            lastExtensionDuration: Math.round(Number(event.usdcAmount) / 1_000_000 * 7),
             firstExtension: timestamp,
             status: 'active'
           };
         } else {
           const agent = statsMap[agentId];
-          if (!event.useUSDC) {
-            agent.totalA0XBurned += a0xBurned;
-          }
+          agent.totalA0XBurned += a0xBurned;
           
           if (timestamp > agent.lastExtended) {
             agent.previousRemainingDays = agent.remainingDays;
             agent.lastExtended = timestamp;
-            agent.remainingDays = Math.floor((Number(event.newTimeToDeath) * 1000 - Date.now()) / (24 * 60 * 60 * 1000));
-            agent.lastExtensionDuration = Math.floor(Number(event.usdcAmount) / 1_000_000 * 7);
+            agent.remainingDays = Math.round((Number(event.newTimeToDeath) * 1000 - Date.now()) / (24 * 60 * 60 * 1000));
+            agent.lastExtensionDuration = Math.round(Number(event.usdcAmount) / 1_000_000 * 7);
           }
           if (timestamp < agent.firstExtension) {
             agent.firstExtension = timestamp;
