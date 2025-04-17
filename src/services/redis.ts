@@ -4,15 +4,33 @@ import { LifeExtendedEvent } from '../types'
 const EVENTS_KEY = 'life_extended_events'
 const LAST_BLOCK_KEY = 'last_block'
 
-// Add timeout helper
-const withTimeout = <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) => 
-      setTimeout(() => reject(new Error('Redis operation timed out')), timeoutMs)
-    )
-  ])
-}
+// Add timeout helper with retry
+const withTimeoutAndRetry = async <T>(
+  operation: () => Promise<T>,
+  timeoutMs: number,
+  retries: number = 2
+): Promise<T> => {
+  let lastError: Error | null = null;
+  
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await Promise.race([
+        operation(),
+        new Promise<T>((_, reject) => 
+          setTimeout(() => reject(new Error('Redis operation timed out')), timeoutMs)
+        )
+      ]);
+    } catch (error) {
+      lastError = error as Error;
+      console.warn(`Attempt ${i + 1} failed:`, error);
+      if (i < retries - 1) {
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+      }
+    }
+  }
+  
+  throw lastError || new Error('Operation failed after retries');
+};
 
 export class RedisService {
   private static redis: Redis | null = null;
@@ -20,22 +38,29 @@ export class RedisService {
   private static getClient() {
     if (this.redis) return this.redis;
 
-    const url = process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN
+    // Try both sets of environment variables
+    const url = process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL || process.env.UPSTASH_REDIS_REST_URL
+    const token = process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
     
     if (!url || !token) {
       console.error('Redis credentials missing:', {
         hasUrl: !!url,
         hasToken: !!token,
-        nodeEnv: process.env.NODE_ENV
+        nodeEnv: process.env.NODE_ENV,
+        hasPublicUrl: !!process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL,
+        hasPublicToken: !!process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN
       });
-      throw new Error('Redis credentials not configured. Please set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN environment variables.')
+      throw new Error('Redis credentials not configured')
     }
     
     this.redis = new Redis({ 
       url, 
       token,
-      automaticDeserialization: true
+      automaticDeserialization: true,
+      retry: {
+        retries: 3,
+        backoff: (retryCount) => Math.min(Math.pow(2, retryCount) * 1000, 10000)
+      }
     })
     return this.redis
   }
@@ -43,7 +68,10 @@ export class RedisService {
   static async getEvents(): Promise<LifeExtendedEvent[]> {
     try {
       const redis = this.getClient()
-      const events = await withTimeout(redis.get<any[]>(EVENTS_KEY), 3000)
+      const events = await withTimeoutAndRetry(
+        () => redis.get<any[]>(EVENTS_KEY),
+        3000
+      )
       if (!events) return []
       
       // Convert string back to BigInt and ensure timestamp is a Date object
@@ -52,17 +80,15 @@ export class RedisService {
           // Handle different timestamp formats
           let timestamp: Date;
           if (typeof event.timestamp === 'string') {
-            // Try parsing ISO string first
             timestamp = new Date(event.timestamp);
             if (isNaN(timestamp.getTime())) {
-              // If not ISO string, try parsing as number
               timestamp = new Date(Number(event.timestamp));
             }
           } else if (typeof event.timestamp === 'number') {
             timestamp = new Date(event.timestamp);
           } else {
             console.warn('Invalid timestamp format:', event.timestamp);
-            timestamp = new Date(); // Fallback to current time
+            timestamp = new Date();
           }
 
           return {
@@ -86,22 +112,18 @@ export class RedisService {
   static async saveEvents(events: LifeExtendedEvent[]) {
     try {
       const redis = this.getClient()
-      // Convert BigInt to string and store timestamp as ISO string
-      const serializedEvents = events.map(event => {
-        try {
-          return {
-            ...event,
-            usdcAmount: event.usdcAmount.toString(),
-            a0xBurned: event.a0xBurned.toString(),
-            newTimeToDeath: event.newTimeToDeath.toString(),
-            timestamp: event.timestamp.toISOString() // Store as ISO string for better compatibility
-          };
-        } catch (error) {
-          console.error('Error serializing event for Redis:', error, event);
-          throw error;
-        }
-      });
-      await redis.set(EVENTS_KEY, serializedEvents)
+      const serializedEvents = events.map(event => ({
+        ...event,
+        usdcAmount: event.usdcAmount.toString(),
+        a0xBurned: event.a0xBurned.toString(),
+        newTimeToDeath: event.newTimeToDeath.toString(),
+        timestamp: event.timestamp.toISOString()
+      }));
+      
+      await withTimeoutAndRetry(
+        () => redis.set(EVENTS_KEY, serializedEvents),
+        3000
+      );
     } catch (error) {
       console.error('Error saving events to Redis:', error)
     }
@@ -110,7 +132,10 @@ export class RedisService {
   static async getLastBlock(): Promise<number> {
     try {
       const redis = this.getClient()
-      const block = await redis.get<number>(LAST_BLOCK_KEY)
+      const block = await withTimeoutAndRetry(
+        () => redis.get<number>(LAST_BLOCK_KEY),
+        3000
+      );
       return block || 0
     } catch (error) {
       console.error('Error getting last block from Redis:', error)
@@ -121,7 +146,10 @@ export class RedisService {
   static async saveLastBlock(block: number) {
     try {
       const redis = this.getClient()
-      await redis.set(LAST_BLOCK_KEY, block)
+      await withTimeoutAndRetry(
+        () => redis.set(LAST_BLOCK_KEY, block),
+        3000
+      );
     } catch (error) {
       console.error('Error saving last block to Redis:', error)
     }
@@ -130,8 +158,10 @@ export class RedisService {
   static async clearCache() {
     try {
       const redis = this.getClient()
-      await redis.del(EVENTS_KEY)
-      await redis.del(LAST_BLOCK_KEY)
+      await Promise.all([
+        withTimeoutAndRetry(() => redis.del(EVENTS_KEY), 3000),
+        withTimeoutAndRetry(() => redis.del(LAST_BLOCK_KEY), 3000)
+      ]);
       console.log('Cache cleared successfully')
     } catch (error) {
       console.error('Error clearing cache:', error)

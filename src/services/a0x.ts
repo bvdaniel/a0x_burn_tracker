@@ -3,79 +3,73 @@ import { AgentProfile } from '../types'
 const API_URL = process.env.NEXT_PUBLIC_A0X_MIRROR_API_URL
 const API_KEY = process.env.NEXT_PUBLIC_A0X_MIRROR_API_KEY
 
+// Add timeout helper
+const withTimeout = <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => 
+      setTimeout(() => reject(new Error('Request timed out')), timeoutMs)
+    )
+  ])
+}
+
 export class A0XService {
-  static async getAgentProfile(agentId: string): Promise<AgentProfile | null> {
-    try {
-      console.log(`Fetching profile for agent ${agentId}...`);
-      
-      // If API URL or key is missing, return default profile
-      if (!API_URL || !API_KEY) {
-        console.warn('API configuration missing, returning default profile');
-        return {
-          name: `Agent ${agentId.slice(0, 6)}...${agentId.slice(-4)}`,
-          imageUrl: '/default-agent.png',
-          socials: {
-            x: null,
-            farcaster: null
-          }
-        };
-      }
-
-      // Fetch all agents
-      const response = await fetch(`${API_URL}/agents`, {
-        headers: {
-          'x-api-key': API_KEY
+  private static async fetchWithRetry(url: string, options: RequestInit, retries = 3): Promise<Response> {
+    let lastError: Error | null = null;
+    
+    for (let i = 0; i < retries; i++) {
+      try {
+        const response = await withTimeout(
+          fetch(url, {
+            ...options,
+            headers: {
+              ...options.headers,
+              'Accept': 'application/json',
+              'x-api-key': API_KEY || '',
+              'Origin': typeof window !== 'undefined' ? window.location.origin : '',
+            },
+            mode: 'cors',
+            credentials: 'omit'
+          }),
+          5000
+        );
+        
+        if (response.ok) {
+          return response;
         }
-      });
-
-      if (!response.ok) {
-        console.error(`Failed to fetch agents:`, response.status);
-        const errorText = await response.text();
-        console.error('Error details:', errorText);
-        return {
-          name: `Agent ${agentId.slice(0, 6)}...${agentId.slice(-4)}`,
-          imageUrl: '/default-agent.png',
-          socials: {
-            x: null,
-            farcaster: null
+        
+        // If we get a 403, try without credentials
+        if (response.status === 403) {
+          const retryResponse = await withTimeout(
+            fetch(url, {
+              ...options,
+              headers: {
+                ...options.headers,
+                'Accept': 'application/json',
+                'x-api-key': API_KEY || '',
+              },
+              mode: 'cors',
+              credentials: 'omit'
+            }),
+            5000
+          );
+          
+          if (retryResponse.ok) {
+            return retryResponse;
           }
-        };
-      }
-
-      const agents = await response.json();
-      const agent = agents.find((a: any) => a.agentId === agentId);
-
-      if (!agent) {
-        console.log(`Agent ${agentId} not found in response, returning default profile`);
-        return {
-          name: `Agent ${agentId.slice(0, 6)}...${agentId.slice(-4)}`,
-          imageUrl: '/default-agent.png',
-          socials: {
-            x: null,
-            farcaster: null
-          }
-        };
-      }
-
-      return {
-        name: agent.name || `Agent ${agentId.slice(0, 6)}...${agentId.slice(-4)}`,
-        imageUrl: agent.imageUrl || '/default-agent.png',
-        socials: {
-          x: agent.socials?.x || null,
-          farcaster: agent.socials?.farcaster || null
         }
-      };
-    } catch (error) {
-      console.error(`Error fetching agent ${agentId} profile:`, error);
-      return {
-        name: `Agent ${agentId.slice(0, 6)}...${agentId.slice(-4)}`,
-        imageUrl: '/default-agent.png',
-        socials: {
-          x: null,
-          farcaster: null
+        
+        lastError = new Error(`HTTP error! status: ${response.status}`);
+      } catch (error) {
+        lastError = error as Error;
+        console.warn(`Attempt ${i + 1} failed:`, error);
+        if (i < retries - 1) {
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
         }
-      };
+      }
     }
+    
+    throw lastError || new Error('Failed to fetch after retries');
   }
 
   static async getAgentProfiles(agentIds: string[]): Promise<Map<string, AgentProfile>> {
@@ -98,28 +92,9 @@ export class A0XService {
       console.log('Starting batch profile fetch for', agentIds.length, 'agents');
       
       // Fetch all agents at once
-      const response = await fetch(`${API_URL}/agents`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'x-api-key': API_KEY
-        },
-        mode: 'cors'
+      const response = await this.fetchWithRetry(`${API_URL}/agents`, {
+        method: 'GET'
       });
-
-      if (!response.ok) {
-        console.error('Failed to fetch agents:', response.status);
-        const errorText = await response.text();
-        console.error('Error details:', errorText);
-        return new Map(agentIds.map(id => [id, {
-          name: `Agent ${id.slice(0, 6)}...${id.slice(-4)}`,
-          imageUrl: '/default-agent.png',
-          socials: {
-            x: null,
-            farcaster: null
-          }
-        }]));
-      }
 
       const agents = await response.json();
       console.log(`Fetched ${agents.length} agents from API`);
@@ -170,7 +145,7 @@ export class A0XService {
         }
       });
 
-      console.log('Finished fetching all profiles:', agentMap);
+      console.log('Finished fetching all profiles');
       return agentMap;
     } catch (error) {
       console.error('Error fetching agent profiles:', error);

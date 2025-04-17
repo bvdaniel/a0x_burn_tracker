@@ -123,7 +123,9 @@ export const getAgentNames = cache(async (agentIds: string[]): Promise<Map<strin
     }
 
     // Use our proxy endpoint instead of calling the API directly
-    const response = await fetch('/api/a0x-mirror', {
+    const response = await fetch(process.env.NODE_ENV === 'production' 
+      ? `${window.location.origin}/api/a0x-mirror`
+      : '/api/a0x-mirror', {
       method: 'GET',
       headers: {
         'Accept': 'application/json'

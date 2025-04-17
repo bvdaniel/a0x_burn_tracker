@@ -15,6 +15,7 @@ const BASE_RPC_URLS = [
 export class BlockchainService {
   private provider: ethers.JsonRpcProvider;
   private contract: ethers.Contract;
+  private eventTopic: string;
 
   constructor() {
     // Try the first RPC URL
@@ -29,6 +30,14 @@ export class BlockchainService {
       CONTRACT_CONFIG.abi,
       this.provider
     );
+
+    // Compute event topic
+    const eventFragment = this.contract.interface.getEvent('LifeExtended');
+    this.eventTopic = ethers.id(
+      'LifeExtended(string,uint256,uint256,uint256,bool)'
+    );
+    console.log('Computed event topic:', this.eventTopic);
+    console.log('Config event topic:', CONTRACT_CONFIG.eventTopic);
   }
 
   private async ensureProvider() {
@@ -51,6 +60,7 @@ export class BlockchainService {
         );
       }
     }
+    throw new Error('All RPC endpoints failed');
   }
 
   async getCurrentBlock(): Promise<number> {
@@ -61,61 +71,61 @@ export class BlockchainService {
   async getLifeExtendedEvents(): Promise<LifeExtendedEvent[]> {
     try {
       await this.ensureProvider();
-      
-      // First try to get events from Redis
-      const events = await RedisService.getEvents();
-      const lastBlock = await RedisService.getLastBlock();
       const currentBlock = await this.provider.getBlockNumber();
-
-      // If we have events and last block, only fetch new events
-      if (events.length > 0 && lastBlock > 0) {
-        const fromBlock = lastBlock + 1;
-        
-        // If we're already up to date, return cached events
-        if (fromBlock >= currentBlock) {
-          return events;
-        }
-
-        // Fetch only new events
-        const filter = {
-          address: CONTRACT_CONFIG.address,
-          topics: [CONTRACT_CONFIG.eventTopic],
-          fromBlock,
-          toBlock: currentBlock
-        };
-
-        const newEvents = await this.fetchEventsFromBlocks(filter, fromBlock, currentBlock);
-        
-        if (newEvents.length > 0) {
-          const allEvents = [...events, ...newEvents];
-          await RedisService.saveEvents(allEvents);
-          await RedisService.saveLastBlock(currentBlock);
-          return allEvents;
-        }
-
-        return events;
-      }
-
-      // If no events in Redis, fetch from blockchain with lookback
-      const blocksPerDay = 5760; // 24 * 60 * 60 / 15
-      const lookbackBlocks = blocksPerDay * 30; // 30 days
+      
+      // Calculate block range - look back 60 days
+      const blocksPerDay = 43200; // ~2s block time
+      const lookbackBlocks = blocksPerDay * 60; // 60 days
       const fromBlock = Math.max(0, currentBlock - lookbackBlocks);
+
+      console.log('Fetching events from block', fromBlock, 'to', currentBlock);
+      console.log('Contract address:', CONTRACT_CONFIG.address);
+      console.log('Event topic:', this.eventTopic);
+
+      // Try a small range first to verify we can get events
+      const testFilter = {
+        address: CONTRACT_CONFIG.address,
+        topics: [this.eventTopic],
+        fromBlock: currentBlock - 1000,
+        toBlock: currentBlock
+      };
+
+      console.log('Testing with recent blocks...');
+      const testLogs = await this.provider.getLogs(testFilter);
+      console.log('Test query found', testLogs.length, 'events in last 1000 blocks');
 
       const filter = {
         address: CONTRACT_CONFIG.address,
-        topics: [CONTRACT_CONFIG.eventTopic],
+        topics: [this.eventTopic],
         fromBlock,
         toBlock: currentBlock
       };
 
-      const newEvents = await this.fetchEventsFromBlocks(filter, fromBlock, currentBlock);
+      const events = await this.fetchEventsFromBlocks(filter, fromBlock, currentBlock);
       
-      if (newEvents.length > 0) {
-        await RedisService.saveEvents(newEvents);
-        await RedisService.saveLastBlock(currentBlock);
+      if (events.length > 0) {
+        console.log('Found', events.length, 'events');
+        // Save to Redis in the background
+        RedisService.saveEvents(events).catch(error => {
+          console.error('Error saving events to Redis:', error);
+        });
+        RedisService.saveLastBlock(currentBlock).catch(error => {
+          console.error('Error saving last block to Redis:', error);
+        });
+      } else {
+        console.log('No events found in block range');
+        // Try without topic filter as a test
+        console.log('Testing without topic filter...');
+        const noTopicFilter = {
+          address: CONTRACT_CONFIG.address,
+          fromBlock: currentBlock - 1000,
+          toBlock: currentBlock
+        };
+        const testNoTopicLogs = await this.provider.getLogs(noTopicFilter);
+        console.log('Found', testNoTopicLogs.length, 'events without topic filter');
       }
 
-      return newEvents;
+      return events;
     } catch (error) {
       console.error('Error fetching events:', error);
       // On error, return events from Redis if available
@@ -128,13 +138,14 @@ export class BlockchainService {
     fromBlock: number,
     toBlock: number
   ): Promise<LifeExtendedEvent[]> {
-    const CHUNK_SIZE = 2880;
-    const DELAY_BETWEEN_CHUNKS = 2000;
-    const MAX_RETRIES = 5;
+    const CHUNK_SIZE = 2000; // Reduced chunk size
+    const DELAY_BETWEEN_CHUNKS = 1000; // Reduced delay
+    const MAX_RETRIES = 3;
     const logs: ethers.Log[] = [];
     
     for (let start = fromBlock; start < toBlock; start += CHUNK_SIZE) {
       const end = Math.min(start + CHUNK_SIZE, toBlock);
+      console.log(`Fetching chunk ${start}-${end}`);
       
       if (start > fromBlock) {
         await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_CHUNKS));
@@ -150,55 +161,55 @@ export class BlockchainService {
             fromBlock: start,
             toBlock: end
           });
+          console.log(`Found ${chunkLogs.length} logs in chunk`);
+          if (chunkLogs.length > 0) {
+            console.log('Sample log:', chunkLogs[0]);
+          }
           logs.push(...chunkLogs);
           success = true;
         } catch (chunkError) {
           retries++;
+          console.warn(`Chunk ${start}-${end} failed (attempt ${retries}):`, chunkError);
           if (retries === MAX_RETRIES) {
             console.error(`Failed to fetch chunk ${start}-${end} after ${MAX_RETRIES} attempts`);
             break;
           } else {
-            const backoffDelay = Math.pow(2, retries) * 2000;
+            const backoffDelay = Math.pow(2, retries) * 1000;
             await new Promise(resolve => setTimeout(resolve, backoffDelay));
           }
         }
       }
     }
 
-    // Process logs in smaller batches
-    const BATCH_SIZE = 5;
+    console.log(`Processing ${logs.length} total logs`);
     const events: LifeExtendedEvent[] = [];
     
-    for (let i = 0; i < logs.length; i += BATCH_SIZE) {
-      const batch = logs.slice(i, i + BATCH_SIZE);
-      
-      if (i > 0) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+    // Process all logs at once instead of batching
+    const processedEvents = await Promise.all(logs.map(async log => {
+      try {
+        const block = await this.provider.getBlock(log.blockNumber);
+        const decoded = this.contract.interface.decodeEventLog('LifeExtended', log.data, log.topics);
+        console.log('Decoded event:', decoded);
+        return {
+          agentId: decoded.agentId,
+          usdcAmount: BigInt(decoded.usdcAmount),
+          a0xBurned: BigInt(decoded.a0xBurned),
+          newTimeToDeath: BigInt(decoded.newTimeToDeath),
+          useUSDC: decoded.useUSDC,
+          timestamp: block?.timestamp ? new Date(Number(block.timestamp) * 1000) : new Date(),
+          transactionHash: log.transactionHash,
+          blockNumber: log.blockNumber
+        };
+      } catch (error) {
+        console.error('Error processing log:', error);
+        console.error('Log data:', log);
+        return null;
       }
+    }));
 
-      const batchEvents = await Promise.all(batch.map(async log => {
-        try {
-          const block = await this.provider.getBlock(log.blockNumber);
-          const decoded = this.contract.interface.decodeEventLog('LifeExtended', log.data, log.topics);
-          return {
-            agentId: decoded.agentId,
-            usdcAmount: BigInt(decoded.usdcAmount),
-            a0xBurned: BigInt(decoded.a0xBurned),
-            newTimeToDeath: BigInt(decoded.newTimeToDeath),
-            useUSDC: decoded.useUSDC,
-            timestamp: block?.timestamp ? new Date(Number(block.timestamp) * 1000) : new Date(),
-            transactionHash: log.transactionHash,
-            blockNumber: log.blockNumber
-          };
-        } catch (error) {
-          console.error('Error processing log:', error);
-          throw error;
-        }
-      }));
-
-      events.push(...batchEvents);
-    }
-
+    // Filter out any null events from processing errors
+    events.push(...processedEvents.filter((event): event is LifeExtendedEvent => event !== null));
+    console.log(`Successfully processed ${events.length} events`);
     return events;
   }
 
