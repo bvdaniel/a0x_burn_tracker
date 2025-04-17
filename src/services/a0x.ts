@@ -1,7 +1,7 @@
 import { AgentProfile } from '../types'
 
-const API_URL = process.env.NEXT_PUBLIC_A0X_MIRROR_API_URL
-const API_KEY = process.env.NEXT_PUBLIC_A0X_MIRROR_API_KEY
+// Use our proxy endpoint instead of direct API calls
+const API_BASE = '/api/a0x-mirror'
 
 // Add timeout helper
 const withTimeout = <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
@@ -25,38 +25,13 @@ export class A0XService {
             headers: {
               ...options.headers,
               'Accept': 'application/json',
-              'x-api-key': API_KEY || '',
-              'Origin': typeof window !== 'undefined' ? window.location.origin : '',
-            },
-            mode: 'cors',
-            credentials: 'omit'
+            }
           }),
           5000
         );
         
         if (response.ok) {
           return response;
-        }
-        
-        // If we get a 403, try without credentials
-        if (response.status === 403) {
-          const retryResponse = await withTimeout(
-            fetch(url, {
-              ...options,
-              headers: {
-                ...options.headers,
-                'Accept': 'application/json',
-                'x-api-key': API_KEY || '',
-              },
-              mode: 'cors',
-              credentials: 'omit'
-            }),
-            5000
-          );
-          
-          if (retryResponse.ok) {
-            return retryResponse;
-          }
         }
         
         lastError = new Error(`HTTP error! status: ${response.status}`);
@@ -76,23 +51,10 @@ export class A0XService {
     const profiles = new Map<string, AgentProfile>();
      
     try {
-      // If API URL or key is missing, return default profiles
-      if (!API_URL || !API_KEY) {
-        console.warn('API configuration missing, returning default profiles');
-        return new Map(agentIds.map(id => [id, {
-          name: `Agent ${id.slice(0, 6)}...${id.slice(-4)}`,
-          imageUrl: '/default-agent.png',
-          socials: {
-            x: null,
-            farcaster: null
-          }
-        }]));
-      }
-
       console.log('Starting batch profile fetch for', agentIds.length, 'agents');
       
-      // Fetch all agents at once
-      const response = await this.fetchWithRetry(`${API_URL}/agents`, {
+      // Fetch all agents through our proxy
+      const response = await this.fetchWithRetry(`${API_BASE}`, {
         method: 'GET'
       });
 

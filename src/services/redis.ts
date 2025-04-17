@@ -32,6 +32,23 @@ const withTimeoutAndRetry = async <T>(
   throw lastError || new Error('Operation failed after retries');
 };
 
+// Helper to merge events
+const mergeEvents = (existingEvents: LifeExtendedEvent[], newEvents: LifeExtendedEvent[]): LifeExtendedEvent[] => {
+  // Create a map of existing events by transaction hash
+  const eventMap = new Map(existingEvents.map(event => [event.transactionHash, event]));
+  
+  // Add new events that don't exist yet
+  for (const event of newEvents) {
+    if (!eventMap.has(event.transactionHash)) {
+      eventMap.set(event.transactionHash, event);
+    }
+  }
+  
+  // Convert back to array and sort by timestamp
+  return Array.from(eventMap.values())
+    .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+};
+
 export class RedisService {
   private static redis: Redis | null = null;
 
@@ -109,10 +126,18 @@ export class RedisService {
     }
   }
 
-  static async saveEvents(events: LifeExtendedEvent[]) {
+  static async saveEvents(newEvents: LifeExtendedEvent[]) {
     try {
       const redis = this.getClient()
-      const serializedEvents = events.map(event => ({
+      
+      // Get existing events
+      const existingEvents = await this.getEvents();
+      
+      // Merge existing and new events
+      const mergedEvents = mergeEvents(existingEvents, newEvents);
+      
+      // Serialize for storage
+      const serializedEvents = mergedEvents.map(event => ({
         ...event,
         usdcAmount: event.usdcAmount.toString(),
         a0xBurned: event.a0xBurned.toString(),
@@ -120,10 +145,13 @@ export class RedisService {
         timestamp: event.timestamp.toISOString()
       }));
       
+      // Save merged events
       await withTimeoutAndRetry(
         () => redis.set(EVENTS_KEY, serializedEvents),
         3000
       );
+      
+      console.log(`Saved ${mergedEvents.length} events (${existingEvents.length} existing, ${newEvents.length} new)`);
     } catch (error) {
       console.error('Error saving events to Redis:', error)
     }
@@ -146,25 +174,22 @@ export class RedisService {
   static async saveLastBlock(block: number) {
     try {
       const redis = this.getClient()
+      const currentBlock = await this.getLastBlock();
+      const newBlock = Math.max(currentBlock, block);
+      
       await withTimeoutAndRetry(
-        () => redis.set(LAST_BLOCK_KEY, block),
+        () => redis.set(LAST_BLOCK_KEY, newBlock),
         3000
       );
+      
+      console.log(`Updated last block from ${currentBlock} to ${newBlock}`);
     } catch (error) {
       console.error('Error saving last block to Redis:', error)
     }
   }
 
   static async clearCache() {
-    try {
-      const redis = this.getClient()
-      await Promise.all([
-        withTimeoutAndRetry(() => redis.del(EVENTS_KEY), 3000),
-        withTimeoutAndRetry(() => redis.del(LAST_BLOCK_KEY), 3000)
-      ]);
-      console.log('Cache cleared successfully')
-    } catch (error) {
-      console.error('Error clearing cache:', error)
-    }
+    console.warn('clearCache() is disabled to prevent data loss');
+    return;
   }
 } 

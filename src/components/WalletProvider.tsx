@@ -9,43 +9,46 @@ import { useEffect, useState } from 'react'
 // Create query client
 const queryClient = new QueryClient()
 
-// Get project ID from environment
-const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || ''
+// Initialize Web3Modal configuration
+const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!
+const metadata = {
+  name: 'Burn Tracker',
+  description: 'Track A0X token burns',
+  url: 'https://www.stonedai.live', // Update with your production URL
+  icons: ['https://avatars.githubusercontent.com/u/37784886']
+}
 
-// Initialize wagmi config
-const wagmiConfig = defaultWagmiConfig({
-  chains: config.chains,
-  projectId,
-  metadata: {
-    name: 'A0X Burn Tracker',
-    description: 'Track A0X burns and life extensions',
-    url: 'https://burntracker.a0x.network',
-    icons: ['https://burntracker.a0x.network/favicon.ico']
-  }
+const wagmiConfig = defaultWagmiConfig({ 
+  chains: config.chains, 
+  projectId, 
+  metadata,
+  enableWalletConnect: true,
+  enableInjected: true,
+  enableEIP6963: true,
+  enableCoinbase: true,
 })
 
-// Initialize modal once
 createWeb3Modal({
   wagmiConfig,
   projectId,
-  enableAnalytics: false, // Disable analytics to avoid 403 errors
-  enableOnramp: false, // Disable onramp to avoid 403 errors
-  themeMode: 'dark'
+  enableAnalytics: true,
+  enableOnramp: true,
+  themeMode: 'dark',
+  themeVariables: {
+    '--w3m-z-index': 1000,
+  },
+  defaultChain: config.chains[0],
 })
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    // Initialize on client side only
+    // Clear any stale WalletConnect data on mount
     if (typeof window !== 'undefined') {
-      // Clear any stale WalletConnect data
-      const staleKeys = Object.keys(localStorage).filter(key => 
-        key.startsWith('wc@2') || 
-        key.startsWith('wagmi') ||
-        key.startsWith('web3modal')
-      )
-      staleKeys.forEach(key => localStorage.removeItem(key))
+      localStorage.removeItem('wagmi.wallet')
+      localStorage.removeItem('wagmi.connected')
+      localStorage.removeItem('wagmi.injected.connected')
       setIsInitialized(true)
     }
   }, [])
