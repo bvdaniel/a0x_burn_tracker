@@ -170,7 +170,7 @@ export function filterAndSortAgents(
   agents: AgentStats[],
   search: string,
   status: 'all' | 'active' | 'inactive' | 'critical',
-  sortBy: 'rank' | 'burnRate' | 'remainingTime',
+  sortBy: 'rank' | 'name' | 'totalBurned' | 'lastExtended' | 'remainingDays',
   sortDirection: 'asc' | 'desc'
 ): AgentStats[] {
   let filtered = [...agents];
@@ -191,10 +191,16 @@ export function filterAndSortAgents(
   filtered.sort((a, b) => {
     let comparison = 0;
     switch (sortBy) {
-      case 'burnRate':
-        comparison = b.totalA0XBurned - a.totalA0XBurned; // Use total burned as burn rate
+      case 'name':
+        comparison = a.agentId.localeCompare(b.agentId);
         break;
-      case 'remainingTime':
+      case 'totalBurned':
+        comparison = b.totalA0XBurned - a.totalA0XBurned;
+        break;
+      case 'lastExtended':
+        comparison = b.lastExtended.getTime() - a.lastExtended.getTime();
+        break;
+      case 'remainingDays':
         comparison = b.remainingDays - a.remainingDays;
         break;
       default: // rank - by total burned

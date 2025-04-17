@@ -39,13 +39,16 @@ export function AgentFilters({ filters, onFiltersChange }: AgentFiltersProps) {
         className="bg-black border border-[#2F3336] rounded-full px-4 py-2 text-[15px] focus:outline-none focus:border-[#1D9BF0] focus:ring-1 focus:ring-[#1D9BF0] min-w-[160px]"
       >
         <option value="rank">Sort by Rank</option>
-        <option value="burnRate">Sort by Burn Rate</option>
-        <option value="remainingTime">Sort by Remaining Time</option>
+        <option value="name">Sort by Name</option>
+        <option value="totalBurned">Sort by Total Burned</option>
+        <option value="lastExtended">Sort by Last Extended</option>
+        <option value="remainingDays">Sort by Remaining Days</option>
       </select>
 
       <button
         onClick={() => onFiltersChange({ ...filters, sortDirection: filters.sortDirection === 'asc' ? 'desc' : 'asc' })}
-        className="bg-black border border-[#2F3336] rounded-full p-2 hover:bg-white/[0.03] focus:outline-none focus:border-[#1D9BF0] focus:ring-1 focus:ring-[#1D9BF0] transition-colors"
+        className="p-2 border border-[#2F3336] rounded-full hover:border-[#1D9BF0] hover:text-[#1D9BF0] transition-colors"
+        title={filters.sortDirection === 'asc' ? 'Sort Ascending' : 'Sort Descending'}
       >
         <ChevronUpDownIcon
           className={`w-5 h-5 text-[#71767B] transition-transform ${

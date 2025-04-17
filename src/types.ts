@@ -23,7 +23,7 @@ export interface AgentStats {
 export interface AgentFilters {
   search: string
   status: 'all' | 'active' | 'inactive' | 'critical'
-  sortBy: 'rank' | 'name' | 'totalBurned' | 'lastExtended' | 'remainingDays'
+  sortBy: 'rank' | 'totalBurned' | 'name' | 'lastExtended' | 'remainingDays'
   sortDirection: 'asc' | 'desc'
 }
 

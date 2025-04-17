@@ -84,7 +84,7 @@ export default function Home() {
   const [filters, setFilters] = useState<FilterOptions>({
     search: '',
     status: 'all',
-    sortBy: 'rank',
+    sortBy: 'totalBurned',
     sortDirection: 'desc'
   });
   const [selectedAgent, setSelectedAgent] = useState<AgentStats | null>(null);
