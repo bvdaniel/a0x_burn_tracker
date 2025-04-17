@@ -56,4 +56,24 @@ export interface AgentMetrics {
   burnedLastWeek: number
   averageLifeExtension: number
   weeklyGrowth: number
+}
+
+export interface ExtensionEvent {
+  id: string
+  agentId: string
+  timestamp: Date
+  duration: number
+  a0xBurned: number
+  previousRemainingDays: number
+  remainingDays: number
+}
+
+export interface DashboardAnalytics {
+  metrics: AgentMetrics
+  recentExtensions: ExtensionEvent[]
+  burnRateTrend: BurnRatePoint[]
+  extensionDistribution: {
+    range: string
+    count: number
+  }[]
 } 
