@@ -4,8 +4,22 @@ import { LifeExtendedEvent } from '../types'
 const EVENTS_KEY = 'life_extended_events'
 const LAST_BLOCK_KEY = 'last_block'
 
+// Add timeout helper
+const withTimeout = <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => 
+      setTimeout(() => reject(new Error('Redis operation timed out')), timeoutMs)
+    )
+  ])
+}
+
 export class RedisService {
+  private static redis: Redis | null = null;
+
   private static getClient() {
+    if (this.redis) return this.redis;
+
     const url = process.env.UPSTASH_REDIS_REST_URL
     const token = process.env.UPSTASH_REDIS_REST_TOKEN
     
@@ -18,13 +32,18 @@ export class RedisService {
       throw new Error('Redis credentials not configured. Please set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN environment variables.')
     }
     
-    return new Redis({ url, token })
+    this.redis = new Redis({ 
+      url, 
+      token,
+      automaticDeserialization: true
+    })
+    return this.redis
   }
 
   static async getEvents(): Promise<LifeExtendedEvent[]> {
     try {
       const redis = this.getClient()
-      const events = await redis.get<any[]>(EVENTS_KEY)
+      const events = await withTimeout(redis.get<any[]>(EVENTS_KEY), 3000)
       if (!events) return []
       
       // Convert string back to BigInt and ensure timestamp is a Date object
