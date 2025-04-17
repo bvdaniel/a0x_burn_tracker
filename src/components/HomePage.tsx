@@ -5,28 +5,22 @@ import { useWeb3Modal } from '@web3modal/wagmi/react';
 import { BlockchainService } from '../services/blockchain';
 import { A0XService } from '../services/a0x';
 import { LifeExtendedEvent, AgentStats, AgentProfile } from '../types';
-import { AgentList } from '../app/components/AgentList';
-import { Header } from '../app/components/Header';
-import { SearchBar } from '../app/components/SearchBar';
-import { StatusFilter } from '../app/components/StatusFilter';
-import { SortOptions } from '../app/components/SortOptions';
-import { AgentList } from './AgentList';
-import { Header } from './Header';
-import { SearchBar } from './SearchBar';
-import { StatusFilter } from './StatusFilter';
-import { SortOptions } from './SortOptions';
+import { AgentCard } from './AgentCard';
+import { AgentFilters } from './AgentFilters';
 import { filterAndSortAgents } from '../utils/filters';
 
 export default function HomePage() {
   const [events, setEvents] = useState<LifeExtendedEvent[]>([]);
   const [agentStats, setAgentStats] = useState<AgentStats[]>([]);
-  const [agentNames, setAgentNames] = useState<Map<string, AgentProfile>>(new Map());
+  const [agentProfiles, setAgentProfiles] = useState<Map<string, AgentProfile>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'critical' | 'inactive'>('all');
-  const [sortBy, setSortBy] = useState<'lastExtended' | 'remainingDays' | 'totalA0XBurned'>('lastExtended');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [filters, setFilters] = useState({
+    search: '',
+    status: 'all',
+    sortBy: 'lastExtended',
+    sortDirection: 'desc'
+  });
   const [refreshing, setRefreshing] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const { open } = useWeb3Modal();
@@ -50,20 +44,7 @@ export default function HomePage() {
       try {
         const profiles = await A0XService.getAgentProfiles(agentIds);
         console.log(`✨ Fetched ${profiles.size} agent profiles`);
-        const convertedProfiles = new Map(
-          Array.from(profiles.entries()).map(([id, profile]) => [
-            id,
-            {
-              name: profile.name,
-              imageUrl: profile.imageUrl || undefined,
-              socials: profile.socials ? {
-                x: profile.socials.x || undefined,
-                farcaster: profile.socials.farcaster || undefined
-              } : undefined
-            }
-          ])
-        );
-        setAgentNames(convertedProfiles);
+        setAgentProfiles(profiles);
       } catch (err) {
         console.error('Error fetching agent profiles:', err);
         // Don't fail the whole operation if profile fetching fails
@@ -87,42 +68,54 @@ export default function HomePage() {
   }, []);
 
   const filteredAgents = filterAndSortAgents(agentStats, {
-    searchQuery,
-    statusFilter,
-    sortBy,
-    sortOrder
+    searchQuery: filters.search,
+    status: filters.status,
+    sortBy: filters.sortBy,
+    sortOrder: filters.sortDirection
   });
 
   return (
     <main className="min-h-screen bg-gray-900 text-white p-4 md:p-8">
-      <Header
-        onConnectWallet={() => open()}
-        onRefresh={fetchData}
-        refreshing={refreshing}
-      />
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-2xl font-bold">A0X Burn Tracker</h1>
+        <div className="flex gap-4">
+          <button
+            onClick={() => open()}
+            className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Connect Wallet
+          </button>
+          <button
+            onClick={fetchData}
+            disabled={refreshing}
+            className="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50"
+          >
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
+        </div>
+      </div>
       
       <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex flex-col md:flex-row gap-4">
-          <SearchBar value={searchQuery} onChange={setSearchQuery} />
-          <StatusFilter value={statusFilter} onChange={setStatusFilter} />
-          <SortOptions
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            onSortByChange={setSortBy}
-            onSortOrderChange={setSortOrder}
-          />
-        </div>
+        <AgentFilters
+          filters={filters}
+          onFiltersChange={setFilters}
+        />
 
         {error ? (
           <div className="text-red-500 text-center py-8">{error}</div>
         ) : loading ? (
           <div className="text-center py-8">Loading...</div>
         ) : (
-          <AgentList
-            agents={filteredAgents}
-            agentNames={agentNames}
-            events={events}
-          />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredAgents.map((agent: AgentStats) => (
+              <AgentCard
+                key={agent.agentId}
+                agent={agent}
+                profile={agentProfiles.get(agent.agentId)}
+                onLifeExtended={fetchData}
+              />
+            ))}
+          </div>
         )}
       </div>
     </main>
