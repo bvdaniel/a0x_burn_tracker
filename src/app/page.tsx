@@ -92,24 +92,28 @@ export default function Home() {
   const [selectedAgentId, setSelectedAgentId] = useState<`0x${string}` | null>(null);
   const [events, setEvents] = useState<LifeExtendedEvent[]>([]);
   const [agentProfiles, setAgentProfiles] = useState<Map<string, AgentProfile>>(new Map())
+  const [isInitialized, setIsInitialized] = useState(false);
 
   const fetchData = async () => {
     try {
-      setLoading(true);
+      if (!isInitialized) {
+        setLoading(true);
+      }
       setError(null);
       
-      // First fetch events from Redis/blockchain
+      // Fetch events first
       const response = await fetch('/api/events');
       if (!response.ok) {
         throw new Error('Failed to fetch events');
       }
       
-      const { events } = await response.json();
+      const { events: newEvents } = await response.json();
+      setEvents(newEvents);
       
       // Process events to aggregate agent statistics
       const statsMap: Record<string, AgentStats> = {};
       
-      events.forEach((event: LifeExtendedEvent) => {
+      newEvents.forEach((event: LifeExtendedEvent) => {
         const agentId = event.agentId;
         const timestamp = new Date(event.timestamp);
         const a0xBurned = Number(event.a0xBurned) / Math.pow(10, 18); // Convert from wei to A0X
@@ -153,17 +157,12 @@ export default function Home() {
       const agentList = Object.values(statsMap);
       setAgentStats(agentList);
 
-      // After we have the agent IDs, fetch their names and pictures
+      // Fetch agent profiles in parallel with events processing
+      const agentIds = agentList.map(agent => agent.agentId);
+      const profilesPromise = A0XService.getAgentProfiles(agentIds);
+      
       try {
-        console.log('Fetching agent profiles...');
-        const agentIds = agentList.map(agent => agent.agentId);
-        console.log('Agent IDs:', agentIds);
-        
-        console.log('A0X API URL:', process.env.NEXT_PUBLIC_A0X_MIRROR_API_URL);
-        const profiles = await A0XService.getAgentProfiles(agentIds);
-        console.log('Fetched profiles:', profiles);
-        
-        // Convert null values to undefined for type compatibility
+        const profiles = await profilesPromise;
         const convertedProfiles = new Map(
           Array.from(profiles.entries()).map(([id, profile]) => [
             id,
@@ -177,8 +176,6 @@ export default function Home() {
             }
           ])
         );
-        
-        console.log('Converted profiles:', convertedProfiles);
         setAgentNames(convertedProfiles);
       } catch (err) {
         console.error('Error fetching agent profiles:', err);
@@ -189,22 +186,25 @@ export default function Home() {
       setError('Failed to load data');
     } finally {
       setLoading(false);
+      setIsInitialized(true);
     }
   };
 
-  // Add polling for updates
+  // Initial data fetch
   useEffect(() => {
-    // Initial fetch
-    fetchData()
+    fetchData();
+  }, []);
 
-    // Set up polling every 5 minutes
+  // Polling for updates
+  useEffect(() => {
+    if (!isInitialized) return;
+
     const interval = setInterval(() => {
-      fetchData()
-    }, 5 * 60 * 1000)
+      fetchData();
+    }, 5 * 60 * 1000); // 5 minutes
 
-    // Cleanup on unmount
-    return () => clearInterval(interval)
-  }, []) // Empty dependency array means this runs once on mount
+    return () => clearInterval(interval);
+  }, [isInitialized]);
 
   if (loading) {
     return (

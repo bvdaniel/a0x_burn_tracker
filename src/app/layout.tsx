@@ -1,14 +1,11 @@
-import type { Metadata } from "next";
+'use client'
+
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { Web3Provider } from "@/components/Web3Provider";
+import { WalletProvider } from "../components/WalletProvider";
+import { Toaster } from 'react-hot-toast'
 
 const inter = Inter({ subsets: ["latin"] });
-
-export const metadata: Metadata = {
-  title: "A0X Burn Tracker",
-  description: "Track A0X burns and agent health",
-};
 
 export default function RootLayout({
   children,
@@ -18,9 +15,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <Web3Provider>
+        <WalletProvider>
           {children}
-        </Web3Provider>
+          <Toaster position="bottom-right" />
+        </WalletProvider>
       </body>
     </html>
   );
