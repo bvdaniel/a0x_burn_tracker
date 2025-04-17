@@ -53,7 +53,6 @@ export function calculateAgentMetrics(agents: AgentStats[]): AgentMetrics {
 export function calculateBurnRateTrend(agents: AgentStats[]): BurnRatePoint[] {
   const now = new Date();
   const thirtyDaysAgo = subDays(now, 29);
-  const thirtyDaysAgoTimestamp = thirtyDaysAgo.getTime() / 1000; // Convert to seconds to match agent timestamps
   
   // Create a map to store daily burns
   const dailyBurns = new Map<string, number>();
@@ -66,14 +65,10 @@ export function calculateBurnRateTrend(agents: AgentStats[]): BurnRatePoint[] {
   
   // Calculate burns for each day
   agents.forEach(agent => {
-    console.log('Processing agent:', agent.agentId, 'lastExtended:', agent.lastExtended);
     try {
-      const date = timestampToDate(agent.lastExtended);
-      console.log('Converted date:', date);
-      const extensionDate = format(date, 'yyyy-MM-dd');
-      console.log('Formatted date:', extensionDate);
+      const extensionDate = format(agent.lastExtended, 'yyyy-MM-dd');
       
-      if (agent.lastExtended >= thirtyDaysAgoTimestamp) {
+      if (agent.lastExtended >= thirtyDaysAgo) {
         const currentBurns = dailyBurns.get(extensionDate) || 0;
         // Divide by 1,000,000 to convert to a more readable unit
         dailyBurns.set(extensionDate, currentBurns + (agent.totalA0XBurned / 1_000_000));
@@ -150,18 +145,18 @@ export function generateExtensionDistribution(agents: AgentStats[]) {
 }
 
 export function calculateAgentHealth(agent: AgentStats): number {
-  const daysSinceExtension = differenceInDays(new Date(), timestampToDate(agent.lastExtended));
+  const daysSinceExtension = differenceInDays(new Date(), agent.lastExtended);
   const healthPercentage = Math.max(0, Math.min(100, 100 - (daysSinceExtension / 180) * 100));
   return Math.round(healthPercentage);
 }
 
 export function generateRecentExtensions(agents: AgentStats[]): ExtensionEvent[] {
   const now = new Date();
-  const lastWeekTimestamp = subDays(now, 7).getTime() / 1000; // Convert to seconds to match agent timestamps
+  const lastWeek = subDays(now, 7);
   
   // Get extensions from the last week
   const recentExtensions = agents
-    .filter(agent => agent.lastExtended >= lastWeekTimestamp)
+    .filter(agent => agent.lastExtended >= lastWeek)
     .map((agent, index) => {
       // For first extensions, previousRemainingDays is 0
       const previousRemainingDays = agent.previousRemainingDays;
@@ -173,7 +168,7 @@ export function generateRecentExtensions(agents: AgentStats[]): ExtensionEvent[]
       return {
         id: `evt-${index}`,
         agentId: agent.agentId,
-        timestamp: timestampToDate(agent.lastExtended),
+        timestamp: agent.lastExtended,
         duration: extensionAmount,
         a0xBurned: agent.totalA0XBurned,
         previousRemainingDays,
@@ -226,7 +221,7 @@ export function filterAndSortAgents(
         comparison = b.totalA0XBurned - a.totalA0XBurned;
         break;
       case 'lastExtended':
-        comparison = b.lastExtended - a.lastExtended; // Compare numeric timestamps directly
+        comparison = b.lastExtended.getTime() - a.lastExtended.getTime();
         break;
       case 'remainingDays':
         comparison = b.remainingDays - a.remainingDays;
