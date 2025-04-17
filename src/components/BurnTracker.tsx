@@ -116,6 +116,17 @@ export function BurnTracker() {
     { range: '22+ days', count: agentStats.filter(agent => agent.remainingDays > 21).length }
   ];
 
+  // Calculate recent extensions from events
+  const recentExtensions = events.map((event, index) => ({
+    id: `evt-${index}`,
+    agentId: event.agentId,
+    timestamp: event.timestamp,
+    duration: Number(event.newTimeToDeath) / (24 * 60 * 60), // Convert seconds to days
+    a0xBurned: Number(event.a0xBurned) / 1e18,
+    previousRemainingDays: 0, // We don't have this info in the event
+    remainingDays: Number(event.newTimeToDeath) / (24 * 60 * 60)
+  }));
+
   return (
     <main className="min-h-screen bg-gray-900 text-white p-4 md:p-8">
       <div className="flex justify-between items-center mb-8">
@@ -159,14 +170,20 @@ export function BurnTracker() {
               <AgentCard
                 key={agent.agentId}
                 agent={agent}
-                profile={agentNames.get(agent.agentId)}
+                profile={agentProfiles.get(agent.agentId)}
                 onLifeExtended={handleLifeExtended}
               />
             ))}
           </div>
         )}
 
-        <RecentExtensions events={events} agentNames={agentNames} />
+        <RecentExtensions 
+          extensions={recentExtensions} 
+          agentNames={new Map(Array.from(agentProfiles.entries()).map(([id, profile]) => [
+            id,
+            { name: profile.name, imageUrl: profile.imageUrl || undefined }
+          ]))} 
+        />
       </div>
     </main>
   );
