@@ -1,86 +1,56 @@
 import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 
-const API_URL = process.env.NEXT_PUBLIC_A0X_MIRROR_API_URL;
-const API_KEY = process.env.NEXT_PUBLIC_A0X_MIRROR_API_KEY;
+// Add CORS headers to response
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+// Handle OPTIONS preflight request
+export async function OPTIONS() {
+  return NextResponse.json({}, { headers: corsHeaders });
+}
 
 export async function GET() {
   try {
-    // Get the request headers
     const headersList = headers();
-    const origin = headersList.get('origin') || '';
+    const referer = headersList.get('referer');
+    const origin = headersList.get('origin');
 
-    // Common response headers
-    const responseHeaders = {
-      'Access-Control-Allow-Origin': origin,
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Max-Age': '86400',
-    };
-
-    if (!API_URL || !API_KEY) {
-      console.error('API configuration missing');
-      return NextResponse.json(
-        { error: 'API configuration missing' },
-        { 
-          status: 500,
-          headers: responseHeaders
-        }
-      );
-    }
-
-    const response = await fetch(`${API_URL}/agents`, {
+    // Forward the request to the A0X Mirror API
+    const response = await fetch('https://development-a0x-mirror-api-422317649866.us-central1.run.app/agents:1', {
+      method: 'GET',
       headers: {
-        'User-Agent': 'burntracker/1.0',
-        'x-api-key': API_KEY,
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'Origin': origin || '',
+        'Referer': referer || '',
       },
-      // Cache the response for 5 minutes
-      next: { revalidate: 300 }
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      console.error('A0x Mirror API error:', error);
-      return NextResponse.json(
-        { error: `API request failed: ${response.status}` },
-        { 
-          status: response.status,
-          headers: responseHeaders
-        }
-      );
+      throw new Error(`API responded with status: ${response.status}`);
     }
 
     const data = await response.json();
-    return NextResponse.json(data, { headers: responseHeaders });
+
+    // Return the response with CORS headers
+    return NextResponse.json(data, { 
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+      }
+    });
+
   } catch (error) {
-    console.error('Proxy error:', error);
+    console.error('Error in a0x-mirror proxy:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Failed to fetch from A0X Mirror API' },
       { 
         status: 500,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
+        headers: corsHeaders
       }
     );
   }
-}
-
-// Handle OPTIONS requests for CORS preflight
-export async function OPTIONS() {
-  const headersList = headers();
-  const origin = headersList.get('origin') || '';
-
-  return new NextResponse(null, {
-    status: 204,
-    headers: {
-      'Access-Control-Allow-Origin': origin,
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Max-Age': '86400',
-    },
-  });
 } 
