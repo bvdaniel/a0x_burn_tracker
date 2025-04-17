@@ -46,4 +46,14 @@ export interface BurnRatePoint {
   timestamp: Date
   rate: number
   movingAverage: number
+}
+
+export interface AgentMetrics {
+  totalAgents: number
+  activeAgents: number
+  criticalAgents: number
+  totalBurned: number
+  burnedLastWeek: number
+  averageLifeExtension: number
+  weeklyGrowth: number
 } 

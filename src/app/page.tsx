@@ -76,6 +76,7 @@ const DEFAULT_AVATAR = '/default-agent.png';
 
 export default function Home() {
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { isConnected } = useAccount()
   const { open } = useWeb3Modal()
@@ -96,8 +97,11 @@ export default function Home() {
 
   const fetchData = async () => {
     try {
+      // Only show loading state on initial load
       if (!isInitialized) {
         setLoading(true);
+      } else {
+        setRefreshing(true);
       }
       setError(null);
       
@@ -108,7 +112,6 @@ export default function Home() {
       }
       
       const { events: newEvents } = await response.json();
-      setEvents(newEvents);
       
       // Process events to aggregate agent statistics
       const statsMap: Record<string, AgentStats> = {};
@@ -155,8 +158,7 @@ export default function Home() {
       });
 
       const agentList = Object.values(statsMap);
-      setAgentStats(agentList);
-
+      
       // Fetch agent profiles in parallel with events processing
       const agentIds = agentList.map(agent => agent.agentId);
       const profilesPromise = A0XService.getAgentProfiles(agentIds);
@@ -181,11 +183,16 @@ export default function Home() {
         console.error('Error fetching agent profiles:', err);
         // Don't fail the whole operation if profile fetching fails
       }
+
+      // Update states only after all data is ready
+      setEvents(newEvents);
+      setAgentStats(agentList);
     } catch (err) {
       console.error('Error fetching data:', err);
       setError('Failed to load data');
     } finally {
       setLoading(false);
+      setRefreshing(false);
       setIsInitialized(true);
     }
   };
@@ -285,6 +292,12 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-black flex flex-col">
       <main className="flex-1 max-w-7xl mx-auto px-4 py-8">
+        {refreshing && (
+          <div className="fixed top-4 right-4 bg-[#1D9BF0]/10 text-[#1D9BF0] px-4 py-2 rounded-full text-sm font-medium">
+            Refreshing data...
+          </div>
+        )}
+        
         <div className="text-center mb-16 relative">
           <div className="absolute inset-0">
             <div className="absolute inset-0 bg-gradient-to-r from-[#1D9BF0]/5 via-transparent to-[#1D9BF0]/5" />
