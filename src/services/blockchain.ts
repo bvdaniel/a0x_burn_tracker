@@ -31,13 +31,9 @@ export class BlockchainService {
       this.provider
     );
 
-    // Compute event topic
-    const eventFragment = this.contract.interface.getEvent('LifeExtended');
-    this.eventTopic = ethers.id(
-      'LifeExtended(string,uint256,uint256,uint256,bool)'
-    );
-    console.log('Computed event topic:', this.eventTopic);
-    console.log('Config event topic:', CONTRACT_CONFIG.eventTopic);
+    // Use event topic from config
+    this.eventTopic = CONTRACT_CONFIG.eventTopic;
+    console.log('Using event topic from config:', this.eventTopic);
   }
 
   private async ensureProvider() {
@@ -68,63 +64,79 @@ export class BlockchainService {
     return this.provider.getBlockNumber();
   }
 
+  private async sleep(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   async getLifeExtendedEvents(): Promise<LifeExtendedEvent[]> {
     try {
       // Get current block
       const currentBlock = await this.getCurrentBlock();
+      console.log('Current block:', currentBlock);
       
-      // Calculate lookback (30 days worth of blocks)
+      // Calculate block range for last 48 hours
       const blocksPerDay = 5760; // 24 * 60 * 60 / 15 (15 second blocks)
-      const lookbackBlocks = blocksPerDay * 30; // 30 days
-      const fromBlock = Math.max(0, currentBlock - lookbackBlocks);
+      const fromBlock = Math.max(0, currentBlock - (blocksPerDay * 2)); // Last 48 hours
       
-      console.log(`Fetching events from block ${fromBlock} to ${currentBlock}`);
+      console.log(`Fetching events from last 48 hours (blocks ${fromBlock} to ${currentBlock})`);
 
-      // Get logs
-      const logs = await this.provider.getLogs({
-        address: CONTRACT_CONFIG.address,
-        topics: [this.eventTopic],
-        fromBlock,
-        toBlock: currentBlock
-      });
+      const BATCH_SIZE = 5000; // Process 5000 blocks at a time
+      const DELAY_BETWEEN_BATCHES = 1000; // 1 second delay between batches
+      const allEvents: LifeExtendedEvent[] = [];
 
-      // Parse logs into events
-      const events: LifeExtendedEvent[] = logs.map(log => {
-        const event = this.contract.interface.parseLog({
-          topics: log.topics as string[],
-          data: log.data
-        });
-        
-        if (!event) {
-          throw new Error('Failed to parse event log');
+      // Process in batches
+      for (let startBlock = fromBlock; startBlock < currentBlock; startBlock += BATCH_SIZE) {
+        const endBlock = Math.min(startBlock + BATCH_SIZE, currentBlock);
+        console.log(`Processing blocks ${startBlock} to ${endBlock}...`);
+
+        try {
+          const filter = this.contract.filters.LifeExtended();
+          const events = await this.contract.queryFilter(filter, startBlock, endBlock);
+          console.log(`Found ${events.length} events in this batch`);
+
+          if (events.length > 0) {
+            const processedEvents = await Promise.all(events.map(async event => {
+              const args = (event as ethers.EventLog).args;
+              if (!args) throw new Error('No args in event');
+              const [agentId, usdcAmount, a0xBurned, newTimeToDeath, useUSDC] = args;
+              
+              const block = (event as ethers.Log).blockNumber;
+              const eventBlock = await event.getBlock();
+              const timestamp = eventBlock ? eventBlock.timestamp : Math.floor(Date.now() / 1000);
+              
+              return {
+                agentId,
+                usdcAmount: BigInt(usdcAmount),
+                a0xBurned: BigInt(a0xBurned),
+                newTimeToDeath: BigInt(newTimeToDeath),
+                useUSDC,
+                timestamp: new Date(Number(timestamp) * 1000),
+                transactionHash: event.transactionHash,
+                blockNumber: block
+              } as LifeExtendedEvent;
+            }));
+
+            allEvents.push(...processedEvents);
+          }
+
+          // Add delay between batches
+          await this.sleep(DELAY_BETWEEN_BATCHES);
+        } catch (error) {
+          console.error(`Error processing batch ${startBlock}-${endBlock}:`, error);
+          // Continue with next batch despite errors
         }
-
-        return {
-          agentId: event.args[0],
-          usdcAmount: event.args[1],
-          a0xBurned: event.args[2],
-          newTimeToDeath: event.args[3],
-          useUSDC: event.args[4],
-          timestamp: new Date((log.blockNumber! * 15 + 1609459200) * 1000), // Approximate timestamp
-          transactionHash: log.transactionHash!,
-          blockNumber: log.blockNumber!
-        };
-      });
-      
-      if (events.length === 0) {
-        console.log('No events found in block range');
-        // Try without topic filter as a test
-        console.log('Testing without topic filter...');
-        const noTopicFilter = {
-          address: CONTRACT_CONFIG.address,
-          fromBlock: currentBlock - 1000,
-          toBlock: currentBlock
-        };
-        const testNoTopicLogs = await this.provider.getLogs(noTopicFilter);
-        console.log('Found', testNoTopicLogs.length, 'events without topic filter');
       }
 
-      return events;
+      if (allEvents.length > 0) {
+        console.log(`Total events found: ${allEvents.length}`);
+        const uniqueAgents = new Set(allEvents.map(e => e.agentId));
+        console.log(`Unique agents: ${uniqueAgents.size}`);
+        console.log(`Time range: ${allEvents[0].timestamp.toISOString()} to ${allEvents[allEvents.length - 1].timestamp.toISOString()}`);
+      } else {
+        console.log('No events found in the specified range');
+      }
+
+      return allEvents;
     } catch (error) {
       console.error('Error fetching events:', error);
       throw error; // Let the caller handle the error

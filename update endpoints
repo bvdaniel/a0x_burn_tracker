@@ -1,0 +1,8 @@
+curl http://localhost:3000/api/clear-cache
+curl http://localhost:3000/api/populate-redis
+
+curl http://localhost:3000/api/fetch-recent
+
+curl http://localhost:3000/api/events
+
+curl http://localhost:3000/api/test-rpc

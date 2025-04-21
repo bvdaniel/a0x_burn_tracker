@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { format } from 'date-fns';
+import { format, parseISO, addHours } from 'date-fns';
 import { useWeb3Modal } from '@web3modal/wagmi/react'
 import { useAccount } from 'wagmi'
 import {
@@ -73,6 +73,11 @@ const ALIEN_PULSE = `
 const HOVER_TRANSITION = 'transition-all duration-200 ease-in-out';
 
 const DEFAULT_AVATAR = '/default-agent.png';
+
+// Helper function to format UTC date
+const formatUTCDate = (date: Date) => {
+  return format(date, 'MMM d, yyyy');
+};
 
 export default function Home() {
   const [loading, setLoading] = useState(true);
@@ -318,7 +323,7 @@ export default function Home() {
             </h1>
             <div className="text-lg font-light tracking-wide text-[#71767B] flex items-center justify-center gap-3">
               <span className="w-12 h-px bg-gradient-to-r from-transparent via-[#1D9BF0]/30 to-transparent" />
-              <span>Life Extension Protocol</span>
+              <span>Life Extension Protocol on Base</span>
               <span className="w-12 h-px bg-gradient-to-r from-transparent via-[#1D9BF0]/30 to-transparent" />
             </div>
           </div>
@@ -470,7 +475,7 @@ export default function Home() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-[#71767B]">
-                        {format(new Date(stat.lastExtended), 'MMM d, yyyy')}
+                        {formatUTCDate(stat.lastExtended)}
                       </div>
                     </td>
                   </tr>

@@ -97,9 +97,12 @@ export class RedisService {
           // Handle different timestamp formats
           let timestamp: Date;
           if (typeof event.timestamp === 'string') {
+            // Parse the ISO string directly to preserve UTC
             timestamp = new Date(event.timestamp);
             if (isNaN(timestamp.getTime())) {
-              timestamp = new Date(Number(event.timestamp));
+              // If it's a numeric timestamp, create a UTC date
+              const numericTimestamp = Number(event.timestamp);
+              timestamp = new Date(numericTimestamp);
             }
           } else if (typeof event.timestamp === 'number') {
             timestamp = new Date(event.timestamp);
@@ -113,7 +116,7 @@ export class RedisService {
             usdcAmount: BigInt(event.usdcAmount),
             a0xBurned: BigInt(event.a0xBurned),
             newTimeToDeath: BigInt(event.newTimeToDeath),
-            timestamp
+            timestamp: timestamp
           };
         } catch (error) {
           console.error('Error processing event from Redis:', error, event);
@@ -189,7 +192,19 @@ export class RedisService {
   }
 
   static async clearCache() {
-    console.warn('clearCache() is disabled to prevent data loss');
-    return;
+    try {
+      const redis = this.getClient();
+      await withTimeoutAndRetry(
+        () => redis.del(EVENTS_KEY),
+        3000
+      );
+      await withTimeoutAndRetry(
+        () => redis.del(LAST_BLOCK_KEY),
+        3000
+      );
+      console.log('Cache cleared successfully');
+    } catch (error) {
+      console.error('Error clearing cache:', error);
+    }
   }
 } 
