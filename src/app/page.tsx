@@ -280,6 +280,18 @@ export default function Home() {
     // Wait longer before first attempt to ensure transaction is indexed
     await new Promise(resolve => setTimeout(resolve, 10000))
     
+    // Call the cron endpoint to ensure we have the latest data
+    try {
+      await fetch('/api/cron', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_CRON_SECRET}`
+        }
+      });
+    } catch (error) {
+      console.error('Error calling cron endpoint:', error);
+    }
+    
     const maxRetries = 3
     const retryDelay = 5000 // 5 seconds between retries
     
